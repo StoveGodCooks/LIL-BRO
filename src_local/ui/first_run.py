@@ -221,6 +221,9 @@ class FirstRunScreen(Screen):
             "Click 'Install Ollama' to install via winget."
         )
 
+    # Default model to auto-pull on fresh install.
+    _DEFAULT_MODEL = "qwen2.5-coder:7b"
+
     async def _handle_models(self) -> None:
         self._show("status-models")
 
@@ -229,12 +232,21 @@ class FirstRunScreen(Screen):
             if len(self._ollama.models) > 5:
                 names += f" (+{len(self._ollama.models) - 5} more)"
             self._set_status("status-models", "ok", f"✓ models: {names}")
+
+            # If 7b is installed, auto-select it.
+            if self._DEFAULT_MODEL in self._ollama.models:
+                try:
+                    self.app._selected_model = self._DEFAULT_MODEL  # type: ignore[attr-defined]
+                except Exception:
+                    pass
+
             self._ready = True
             self._set_hint("[press ENTER to continue · Q to quit]")
         else:
+            # No models at all — auto-pull the default 7b.
             self._set_status("status-models", "pending",
-                             "· no models installed — pick one below")
-            await self._build_model_picker()
+                             f"· no models found — pulling {self._DEFAULT_MODEL} (recommended)...")
+            await self._pull_model(self._DEFAULT_MODEL)
 
     # ── Button handler ───────────────────────────────────────
 

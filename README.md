@@ -1,5 +1,20 @@
 # LiL BRO
 
+```
+  ╺╺╺╺╺    ╺╺╺╺╺    ╺╺╺╺╺
+    ╏        ╏ ╏    ╏╺╺
+    ╏        ╏ ╏    ╏╺╺
+    ╏        ╏ ╏    ╏
+    ╏╺╺╺     ╏ ╏    ╏╺╺╺╺
+
+   ╏━━━╏   ╏━━━╏    ━━╏━━   ╏━━━━
+   ╏━━━╏   ╏━╏      ╏ ╏ ╏   ╏━━━━
+   ╏   ╏   ╏  ╏     ╏ ╏ ╏       ╏
+   ╏━━━╏   ╏   ╏    ━━╏━━   ╏━━━╏
+
+        local-model coding TUI
+```
+
 **A local AI coding assistant that runs entirely on your machine.** No API keys, no cloud, no billing. Just you, your GPU, and two bros who won't stop arguing.
 
 LiL BRO is a dual-agent TUI (terminal user interface) that wraps [Ollama](https://ollama.com) to give you two AI coding assistants working side by side:
