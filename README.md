@@ -16,6 +16,11 @@ They share a workspace, they know about each other, and they will absolutely tal
 ![Python](https://img.shields.io/badge/python-3.11+-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Ollama](https://img.shields.io/badge/powered%20by-Ollama-orange)
+![Platform](https://img.shields.io/badge/platform-Windows-lightgrey)
+![macOS](https://img.shields.io/badge/macOS-in%20progress-yellow)
+![Linux](https://img.shields.io/badge/Linux-in%20progress-yellow)
+
+> **Platform note:** LiL BRO currently runs on **Windows**. macOS and Linux ports are actively in development — the core app (Python, Textual, Ollama) is fully cross-platform, but the installer and shell execution layer need platform-specific work before we can officially support them. Apple Silicon (M1/M2/M3) support is also planned and should be excellent once the port is done — Ollama runs natively on Metal.
 
 ---
 
