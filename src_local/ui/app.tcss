@@ -4,7 +4,108 @@ Screen {
     background: #1A1A1A;
 }
 
-/* ── Startup screen ────────────────────────────────── */
+/* ── Hidden helper ─────────────────────────────────── */
+
+.hidden {
+    display: none;
+}
+
+/* ── First-run wizard ──────────────────────────────── */
+
+#wizard-box {
+    width: 70;
+    height: auto;
+    max-height: 90%;
+    padding: 1 2;
+    border: round #A8D840;
+    background: #111111;
+    overflow-y: auto;
+}
+
+#wizard-logo {
+    text-align: center;
+    color: #A8D840;
+    text-style: bold;
+    margin-bottom: 1;
+}
+
+#wizard-step {
+    text-align: center;
+    color: #E8A838;
+    text-style: bold;
+    margin-bottom: 1;
+}
+
+#wizard-hw {
+    color: #6EC8E8;
+    margin-bottom: 1;
+}
+
+#wizard-ollama-status {
+    color: #E8E8E8;
+    margin-bottom: 1;
+}
+
+#wizard-instructions {
+    color: #888888;
+    margin-bottom: 1;
+}
+
+.button-row {
+    height: auto;
+    margin-bottom: 1;
+}
+
+.button-row Button {
+    margin: 0 1;
+}
+
+#wizard-model-header {
+    color: #A8D840;
+    text-style: bold;
+    margin-bottom: 1;
+}
+
+/* Model cards */
+.model-info {
+    color: #CCCCCC;
+    padding: 0 1;
+    margin-bottom: 0;
+}
+
+.model-btn {
+    width: 100%;
+    margin-bottom: 1;
+}
+
+#pull-status {
+    color: #E8A838;
+    text-align: center;
+    margin: 1 0;
+}
+
+#pull-progress {
+    margin: 0 2 1 2;
+}
+
+#btn-continue {
+    width: 100%;
+    margin-top: 1;
+}
+
+#btn-download-ollama {
+    width: 1fr;
+}
+
+#btn-retry-ollama {
+    width: 1fr;
+}
+
+#btn-skip-ollama {
+    width: 1fr;
+}
+
+/* ── Startup screen (legacy) ───────────────────────── */
 
 #startup-box {
     width: 60;
