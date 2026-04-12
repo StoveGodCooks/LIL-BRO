@@ -13,12 +13,15 @@ LiL BRO is a dual-agent TUI (terminal user interface) that wraps [Ollama](https:
 
 They share a workspace, they know about each other, and they will absolutely talk trash when the other one is idle.
 
+![Status](https://img.shields.io/badge/status-beta-red)
 ![Python](https://img.shields.io/badge/python-3.11+-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Ollama](https://img.shields.io/badge/powered%20by-Ollama-orange)
 ![Platform](https://img.shields.io/badge/platform-Windows-lightgrey)
 ![macOS](https://img.shields.io/badge/macOS-in%20progress-yellow)
 ![Linux](https://img.shields.io/badge/Linux-in%20progress-yellow)
+
+> ⚠️ **LiL BRO is in beta.** Expect rough edges, missing features, and the occasional bro meltdown. Things will break. We're building in public and moving fast — feedback and bug reports welcome.
 
 > **Platform note:** LiL BRO currently runs on **Windows**. macOS and Linux ports are actively in development — the core app (Python, Textual, Ollama) is fully cross-platform, but the installer and shell execution layer need platform-specific work before we can officially support them. Apple Silicon (M1/M2/M3) support is also planned and should be excellent once the port is done — Ollama runs natively on Metal.
 
