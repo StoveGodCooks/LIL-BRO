@@ -1,0 +1,17 @@
+id: marsh_02
+area: marsh
+title: Catch the Named Beast
+type: retype
+concept_tags:
+- except as
+xp: 20
+story: Name the beast you caught.
+task: Catch ValueError as exc and print it.
+solution: "try:\n    risky()\nexcept ValueError as exc:\n    print(exc)"
+hints:
+- 'except ValueError as exc:'
+- print exc inside
+- same four-space indent
+bonus_xp_no_hints: 5
+time_par_seconds: 90
+debrief: Well struck.

@@ -5,3 +5,16 @@ dist/
 build/
 .eggs/
 *.egg
+
+# Session/state files (user-specific, regenerated at runtime)
+SESSION.md
+SESSION.md.lock
+BROS_LOG.md
+
+# Pytest cache artifacts
+pytest-cache-files-*/
+.pytest_cache/
+
+# IDE
+.vscode/
+.idea/

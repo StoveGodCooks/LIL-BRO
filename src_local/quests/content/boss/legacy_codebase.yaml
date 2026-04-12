@@ -1,0 +1,49 @@
+id: legacy_codebase
+area: marsh
+title: The Legacy Codebase
+type: boss
+concept_tags:
+- boss
+- integration
+xp: 500
+story: Deep beneath the Marsh lies a forgotten codebase. Its logs are silent. Its
+  imports are circular. Only a complete hero can refactor it.
+task: Defeat each module of the Legacy Codebase in turn.
+debrief: You tamed the legacy. The Codelands are safe. For now.
+hints: []
+bonus_xp_no_hints: 100
+time_par_seconds: 0
+chunks:
+- id: import_block
+  title: Import Block
+  type: retype
+  task: Import json from the standard library.
+  solution: import json
+- id: data_sweep
+  title: Data Sweep
+  type: retype
+  task: Build a list of squares for 0..4.
+  solution: '[n * n for n in range(5)]'
+- id: forecaster
+  title: Forecaster
+  type: retype
+  task: 'Define `forecast(x): return x + 1`.'
+  solution: "def forecast(x):\n    return x + 1"
+- id: async_relay
+  title: Async Relay
+  type: retype
+  task: 'Define `async def relay(): await hop()`.'
+  solution: "async def relay():\n    await hop()"
+- id: error_gate
+  title: Error Gate
+  type: retype
+  task: Try risky(), catch Exception and pass.
+  solution: "try:\n    risky()\nexcept Exception:\n    pass"
+- id: weather_engine
+  title: Weather Engine
+  type: key_lines
+  task: Define class Weather with __init__ that stores self.temp.
+  key_lines:
+  - 'class Weather:'
+  - 'def __init__(self, temp):'
+  - self.temp = temp

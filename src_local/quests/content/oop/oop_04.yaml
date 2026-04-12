@@ -1,0 +1,17 @@
+id: oop_04
+area: oop
+title: Heir to the Throne
+type: retype
+concept_tags:
+- inheritance
+xp: 25
+story: A prince inherits everything from a knight.
+task: 'Define class Prince(Knight): pass.'
+solution: "class Prince(Knight):\n    pass"
+hints:
+- parentheses after the class name
+- put Knight inside
+- body is pass
+bonus_xp_no_hints: 5
+time_par_seconds: 120
+debrief: Well struck.

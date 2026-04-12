@@ -1,0 +1,17 @@
+id: async_02
+area: async
+title: Awaiting the Echo
+type: retype
+concept_tags:
+- await
+xp: 20
+story: Wait for the echo to come back.
+task: 'Define `async def wait_for(x): return await x`.'
+solution: "async def wait_for(x):\n    return await x"
+hints:
+- async def with parameter x
+- return the awaited value
+- use await x
+bonus_xp_no_hints: 5
+time_par_seconds: 90
+debrief: Well struck.

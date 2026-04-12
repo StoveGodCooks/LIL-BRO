@@ -1,0 +1,18 @@
+id: oop_07
+area: oop
+title: The Property Gate
+type: retype
+concept_tags:
+- property
+xp: 35
+story: Some attributes need guards.
+task: Use @property to expose a read-only `full_title` computed from self.name.
+solution: "class Knight:\n    @property\n    def full_title(self):\n        return\
+  \ f\"Sir {self.name}\""
+hints:
+- '@property decorator on the method'
+- 'def full_title(self):'
+- f-string with self.name
+bonus_xp_no_hints: 5
+time_par_seconds: 180
+debrief: Well struck.

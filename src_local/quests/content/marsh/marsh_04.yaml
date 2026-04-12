@@ -1,0 +1,17 @@
+id: marsh_04
+area: marsh
+title: Raise the Alarm
+type: retype
+concept_tags:
+- raise
+xp: 25
+story: Sometimes you have to shout back.
+task: Raise a ValueError with the message 'bad input'.
+solution: raise ValueError("bad input")
+hints:
+- use raise keyword
+- ValueError takes a message
+- string in quotes
+bonus_xp_no_hints: 5
+time_par_seconds: 120
+debrief: Well struck.

@@ -1,0 +1,17 @@
+id: loop_04
+area: loop
+title: Enumerated Runes
+type: retype
+concept_tags:
+- enumerate
+xp: 25
+story: Count as you read — the index matters.
+task: Enumerate the list ['x','y','z'] and print index + value.
+solution: "for i, v in enumerate([\"x\", \"y\", \"z\"]):\n    print(i, v)"
+hints:
+- enumerate yields (index, value)
+- tuple-unpack the pair
+- print both
+bonus_xp_no_hints: 5
+time_par_seconds: 120
+debrief: Well struck.

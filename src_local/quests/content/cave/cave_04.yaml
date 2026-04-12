@@ -1,0 +1,17 @@
+id: cave_04
+area: cave
+title: Adding Two Stones
+type: retype
+concept_tags:
+- functions
+xp: 25
+story: A pair of glowing stones wait on an altar. Add them.
+task: Define `add(a, b)` that returns their sum.
+solution: "def add(a, b):\n    return a + b"
+hints:
+- two parameters inside the parens
+- indent the body
+- return a + b
+bonus_xp_no_hints: 5
+time_par_seconds: 120
+debrief: Well struck.

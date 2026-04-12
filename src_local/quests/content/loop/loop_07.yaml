@@ -1,0 +1,17 @@
+id: loop_07
+area: loop
+title: Nested Spirals
+type: retype
+concept_tags:
+- nested for
+xp: 35
+story: Two loops inside one. A 2x2 grid.
+task: Print each (i, j) pair where i and j are both in range(2).
+solution: "for i in range(2):\n    for j in range(2):\n        print(i, j)"
+hints:
+- outer loop first
+- inner loop indented inside
+- print both
+bonus_xp_no_hints: 5
+time_par_seconds: 180
+debrief: Well struck.

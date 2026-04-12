@@ -1,0 +1,17 @@
+id: loop_05
+area: loop
+title: Break the Chain
+type: retype
+concept_tags:
+- break
+xp: 30
+story: When you find a 3, the chain snaps.
+task: Loop over [1,2,3,4] and break out as soon as you see 3.
+solution: "for n in [1, 2, 3, 4]:\n    if n == 3:\n        break"
+hints:
+- check with `if n == 3`
+- break inside the if
+- no else needed
+bonus_xp_no_hints: 5
+time_par_seconds: 150
+debrief: Well struck.

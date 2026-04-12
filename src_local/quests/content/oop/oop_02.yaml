@@ -1,0 +1,17 @@
+id: oop_02
+area: oop
+title: Init the Knight
+type: retype
+concept_tags:
+- __init__
+xp: 20
+story: A knight needs a name when summoned.
+task: Add an __init__ that stores self.name from a parameter.
+solution: "class Knight:\n    def __init__(self, name):\n        self.name = name"
+hints:
+- 'def __init__(self, name):'
+- assign self.name = name
+- indent twice
+bonus_xp_no_hints: 5
+time_par_seconds: 90
+debrief: Well struck.

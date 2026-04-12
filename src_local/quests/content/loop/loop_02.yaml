@@ -1,0 +1,17 @@
+id: loop_02
+area: loop
+title: Torch Count
+type: retype
+concept_tags:
+- while
+xp: 20
+story: A torch flickers five times before dying.
+task: Use a while loop to print 'tick' five times.
+solution: "n = 5\nwhile n > 0:\n    print(\"tick\")\n    n -= 1"
+hints:
+- start with a counter
+- loop while n > 0
+- decrement n inside the body
+bonus_xp_no_hints: 5
+time_par_seconds: 90
+debrief: Well struck.

@@ -7,10 +7,14 @@ rank which models from the catalog will run well on this machine.
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 import platform
 import shutil
+import subprocess
 from dataclasses import dataclass
+
+logger = logging.getLogger("lilbro-local.hardware")
 
 
 @dataclass
@@ -54,13 +58,11 @@ async def detect_hardware() -> HardwareInfo:
         except Exception:
             # Windows without psutil — try wmic.
             try:
-                proc = await asyncio.create_subprocess_exec(
-                    "wmic", "ComputerSystem", "get", "TotalPhysicalMemory",
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE,
+                result = subprocess.run(
+                    ["wmic", "ComputerSystem", "get", "TotalPhysicalMemory"],
+                    capture_output=True, text=True, timeout=5,
                 )
-                stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=5.0)
-                for line in stdout.decode().strip().splitlines():
+                for line in result.stdout.strip().splitlines():
                     line = line.strip()
                     if line.isdigit():
                         info.ram_gb = int(line) / (1024 ** 3)
@@ -85,21 +87,29 @@ async def detect_hardware() -> HardwareInfo:
         pass
 
     # NVIDIA GPU via nvidia-smi.
+    # Use subprocess.run (sync) instead of asyncio — on Windows, Textual's
+    # event loop can't always spawn subprocesses reliably. nvidia-smi is
+    # fast (~100ms) so blocking here is fine.
     nvidia_smi = shutil.which("nvidia-smi")
+    if not nvidia_smi and platform.system() == "Windows":
+        # Fallback: known Windows paths.
+        for candidate in [
+            os.path.join(os.environ.get("SystemRoot", r"C:\WINDOWS"), "System32", "nvidia-smi.exe"),
+            r"C:\Program Files\NVIDIA Corporation\NVSMI\nvidia-smi.exe",
+        ]:
+            if os.path.isfile(candidate):
+                nvidia_smi = candidate
+                break
+
     if nvidia_smi:
         try:
-            proc = await asyncio.create_subprocess_exec(
-                nvidia_smi,
-                "--query-gpu=name,memory.total",
-                "--format=csv,noheader,nounits",
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
+            result = subprocess.run(
+                [nvidia_smi, "--query-gpu=name,memory.total", "--format=csv,noheader,nounits"],
+                capture_output=True, text=True, timeout=10,
             )
-            stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=10.0)
-            if proc.returncode == 0:
-                output = stdout.decode("utf-8", errors="replace").strip()
+            if result.returncode == 0:
+                output = result.stdout.strip()
                 if output:
-                    # Take the first GPU.
                     parts = output.splitlines()[0].split(",")
                     if len(parts) >= 2:
                         info.gpu_name = parts[0].strip()
@@ -108,8 +118,9 @@ async def detect_hardware() -> HardwareInfo:
                         except ValueError:
                             pass
                         info.has_gpu = True
-        except (asyncio.TimeoutError, OSError):
-            pass
+                        logger.info("GPU detected: %s (%.1f GB VRAM)", info.gpu_name, info.vram_gb)
+        except (subprocess.TimeoutExpired, OSError) as exc:
+            logger.warning("nvidia-smi failed: %s", exc)
 
     return info
 

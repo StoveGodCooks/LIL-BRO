@@ -1,0 +1,17 @@
+id: cave_03
+area: cave
+title: Summoning a Function
+type: retype
+concept_tags:
+- functions
+xp: 25
+story: Every adventurer needs a greeting spell.
+task: Define a function `greet` that returns the string 'hi'.
+solution: "def greet():\n    return \"hi\""
+hints:
+- start with def
+- four-space indent inside the body
+- use return, not print
+bonus_xp_no_hints: 5
+time_par_seconds: 120
+debrief: Well struck.

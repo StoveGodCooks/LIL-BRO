@@ -1,0 +1,17 @@
+id: oop_06
+area: oop
+title: Dunder Str
+type: retype
+concept_tags:
+- __str__
+xp: 30
+story: How does a knight announce himself?
+task: Add __str__ returning 'Knight(name)' format string.
+solution: "class Knight:\n    def __str__(self):\n        return f\"Knight({self.name})\""
+hints:
+- define __str__(self)
+- f-string for formatting
+- reference self.name
+bonus_xp_no_hints: 5
+time_par_seconds: 150
+debrief: Well struck.

@@ -1,0 +1,17 @@
+id: async_07
+area: async
+title: Timeout Ward
+type: retype
+concept_tags:
+- asyncio.wait_for
+xp: 35
+story: Some wanderers never return. Set a ward.
+task: Call asyncio.wait_for(coro, timeout=5).
+solution: asyncio.wait_for(coro, timeout=5)
+hints:
+- wait_for takes (coro, timeout)
+- use keyword timeout=5
+- no await needed here
+bonus_xp_no_hints: 5
+time_par_seconds: 180
+debrief: Well struck.

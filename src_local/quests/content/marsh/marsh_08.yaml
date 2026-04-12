@@ -1,0 +1,19 @@
+id: marsh_08
+area: marsh
+title: Context Shield
+type: key_lines
+concept_tags:
+- contextlib
+xp: 40
+story: Use a context manager to seal the gate.
+task: Use a `with` statement to open 'file.txt' as f.
+key_lines:
+- 'with open("file.txt") as f:'
+- pass
+hints:
+- with keyword starts it
+- open returns the resource
+- use `as f` to bind
+bonus_xp_no_hints: 6
+time_par_seconds: 240
+debrief: Well struck.

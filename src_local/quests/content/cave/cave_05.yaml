@@ -1,0 +1,17 @@
+id: cave_05
+area: cave
+title: The List of Runes
+type: retype
+concept_tags:
+- list comprehensions
+xp: 30
+story: The wall shows five runes in a line.
+task: Build a list of squares from 0..4 using a list comprehension.
+solution: squares = [n * n for n in range(4 + 1)]
+hints:
+- square brackets start the comprehension
+- use `for n in range(...)`
+- n * n is the value
+bonus_xp_no_hints: 5
+time_par_seconds: 150
+debrief: Well struck.

@@ -1,0 +1,17 @@
+id: cave_01
+area: cave
+title: Echoes in the Dark
+type: retype
+concept_tags:
+- variables
+xp: 20
+story: 'A glowing rune whispers: ''name the stone and it obeys.'''
+task: Retype the snippet exactly. Assign the integer 1 to x.
+solution: x = 1
+hints:
+- use a single equals sign
+- no quotes around 1
+- just one line
+bonus_xp_no_hints: 5
+time_par_seconds: 90
+debrief: Well struck.

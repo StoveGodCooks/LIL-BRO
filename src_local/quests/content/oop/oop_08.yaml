@@ -1,0 +1,22 @@
+id: oop_08
+area: oop
+title: Dataclass Decree
+type: key_lines
+concept_tags:
+- dataclasses
+xp: 40
+story: A decree standardizes every knight.
+task: Use @dataclass to define Knight with name:str and rank:int = 1.
+key_lines:
+- from dataclasses import dataclass
+- '@dataclass'
+- 'class Knight:'
+- 'name: str'
+- 'rank: int = 1'
+hints:
+- import dataclass from dataclasses
+- stack the @dataclass above the class
+- type-annotate each field
+bonus_xp_no_hints: 6
+time_par_seconds: 240
+debrief: Well struck.

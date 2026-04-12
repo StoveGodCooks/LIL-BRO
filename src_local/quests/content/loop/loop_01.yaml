@@ -1,0 +1,17 @@
+id: loop_01
+area: loop
+title: The Endless Corridor
+type: retype
+concept_tags:
+- for
+xp: 20
+story: A hall stretches forward. Count each step.
+task: Print each number from 0 to 4 with a for loop.
+solution: "for i in range(5):\n    print(i)"
+hints:
+- range(5) gives 0..4
+- indent the print
+- one print call
+bonus_xp_no_hints: 5
+time_par_seconds: 90
+debrief: Well struck.

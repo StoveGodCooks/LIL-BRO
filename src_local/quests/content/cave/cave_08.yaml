@@ -1,0 +1,19 @@
+id: cave_08
+area: cave
+title: The First Import
+type: key_lines
+concept_tags:
+- decorators
+xp: 40
+story: Every toolchain starts with bringing in a blade.
+task: Import the `math` module and use it to compute the square root of 16.
+key_lines:
+- import math
+- math.sqrt(16)
+hints:
+- use `import math`
+- call math.sqrt
+- the argument is 16
+bonus_xp_no_hints: 6
+time_par_seconds: 240
+debrief: Well struck.

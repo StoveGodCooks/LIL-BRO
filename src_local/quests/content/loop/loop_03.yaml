@@ -1,0 +1,17 @@
+id: loop_03
+area: loop
+title: Zipped Paths
+type: retype
+concept_tags:
+- zip
+xp: 25
+story: Two rows of stones run parallel. Pair them.
+task: Zip names and ages and print each pair.
+solution: "for name, age in zip([\"a\", \"b\"], [1, 2]):\n    print(name, age)"
+hints:
+- zip takes two iterables
+- unpack with name, age
+- print both
+bonus_xp_no_hints: 5
+time_par_seconds: 120
+debrief: Well struck.

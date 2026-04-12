@@ -1,0 +1,17 @@
+id: async_05
+area: async
+title: Sleeping in the Void
+type: retype
+concept_tags:
+- asyncio.sleep
+xp: 30
+story: Every coroutine can rest.
+task: Use await asyncio.sleep to pause one second.
+solution: await asyncio.sleep(1)
+hints:
+- await goes before the call
+- asyncio.sleep takes seconds
+- pass 1 as the arg
+bonus_xp_no_hints: 5
+time_par_seconds: 150
+debrief: Well struck.

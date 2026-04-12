@@ -1,0 +1,17 @@
+id: marsh_07
+area: marsh
+title: Re-raise the Storm
+type: retype
+concept_tags:
+- re-raise
+xp: 35
+story: Sometimes you log, then re-throw.
+task: Inside except, log and then `raise` (bare) to re-raise.
+solution: "try:\n    risky()\nexcept Exception:\n    log()\n    raise"
+hints:
+- call log() first
+- bare `raise` re-raises
+- same indent as log()
+bonus_xp_no_hints: 5
+time_par_seconds: 180
+debrief: Well struck.

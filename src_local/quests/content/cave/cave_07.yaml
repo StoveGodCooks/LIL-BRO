@@ -1,0 +1,17 @@
+id: cave_07
+area: cave
+title: Dict of Gems
+type: retype
+concept_tags:
+- dict
+xp: 35
+story: A chest holds three gems with names.
+task: Create a dict mapping 'ruby' to 1 and 'emerald' to 2.
+solution: 'gems = {"ruby": 1, "emerald": 2}'
+hints:
+- curly braces for dicts
+- keys in quotes
+- comma between pairs
+bonus_xp_no_hints: 5
+time_par_seconds: 180
+debrief: Well struck.

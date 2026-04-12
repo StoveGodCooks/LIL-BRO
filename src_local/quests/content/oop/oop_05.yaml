@@ -1,0 +1,17 @@
+id: oop_05
+area: oop
+title: Calling the Elder
+type: retype
+concept_tags:
+- super
+xp: 30
+story: The prince calls on the knight's power.
+task: Override __init__ to call super().__init__(name).
+solution: "class Prince(Knight):\n    def __init__(self, name):\n        super().__init__(name)"
+hints:
+- 'def __init__(self, name):'
+- super() with parens
+- call __init__(name)
+bonus_xp_no_hints: 5
+time_par_seconds: 150
+debrief: Well struck.

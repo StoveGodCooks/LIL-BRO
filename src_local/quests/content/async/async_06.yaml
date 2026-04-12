@@ -1,0 +1,17 @@
+id: async_06
+area: async
+title: The Task Summon
+type: retype
+concept_tags:
+- asyncio.create_task
+xp: 30
+story: Fire-and-forget a coroutine as a task.
+task: Call asyncio.create_task(hello()).
+solution: asyncio.create_task(hello())
+hints:
+- create_task accepts a coroutine
+- do not await it here
+- pass hello()
+bonus_xp_no_hints: 5
+time_par_seconds: 150
+debrief: Well struck.

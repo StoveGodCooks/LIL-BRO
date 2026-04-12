@@ -1,0 +1,19 @@
+id: async_08
+area: async
+title: The Async Context
+type: key_lines
+concept_tags:
+- async with
+xp: 40
+story: Some gates must open and close in sequence.
+task: Use async with to enter `resource` and bind it to `r`.
+key_lines:
+- 'async with resource as r:'
+- pass
+hints:
+- begin with `async with`
+- use `as r` to bind
+- remember the colon
+bonus_xp_no_hints: 6
+time_par_seconds: 240
+debrief: Well struck.

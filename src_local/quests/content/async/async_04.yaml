@@ -1,0 +1,17 @@
+id: async_04
+area: async
+title: Gather the Wanderers
+type: retype
+concept_tags:
+- asyncio.gather
+xp: 25
+story: Three travelers return in parallel.
+task: Use asyncio.gather to await a, b, c concurrently.
+solution: await asyncio.gather(a, b, c)
+hints:
+- asyncio.gather takes coroutines
+- await the gather call
+- three arguments a, b, c
+bonus_xp_no_hints: 5
+time_par_seconds: 120
+debrief: Well struck.

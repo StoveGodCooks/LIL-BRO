@@ -1,0 +1,17 @@
+id: cave_06
+area: cave
+title: Print the Way
+type: retype
+concept_tags:
+- functions
+xp: 30
+story: Light reveals the path when you speak its name.
+task: Call print with the string 'path found'.
+solution: print("path found")
+hints:
+- print is a builtin
+- pass a string in quotes
+- one line total
+bonus_xp_no_hints: 5
+time_par_seconds: 150
+debrief: Well struck.

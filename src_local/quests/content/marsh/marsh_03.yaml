@@ -1,0 +1,17 @@
+id: marsh_03
+area: marsh
+title: Finally, Home
+type: retype
+concept_tags:
+- finally
+xp: 25
+story: No matter what happens, close the door.
+task: Add a finally clause that calls `cleanup()`.
+solution: "try:\n    risky()\nfinally:\n    cleanup()"
+hints:
+- 'finally: after try'
+- call cleanup inside
+- no except needed here
+bonus_xp_no_hints: 5
+time_par_seconds: 120
+debrief: Well struck.

@@ -1,0 +1,18 @@
+id: marsh_06
+area: marsh
+title: The Else Path
+type: retype
+concept_tags:
+- try/else
+xp: 30
+story: If nothing exploded, take the else road.
+task: Add an else clause that prints 'ok' after a successful try.
+solution: "try:\n    risky()\nexcept Exception:\n    pass\nelse:\n    print(\"ok\"\
+  )"
+hints:
+- 'else: after except'
+- print ok inside
+- only runs on success
+bonus_xp_no_hints: 5
+time_par_seconds: 150
+debrief: Well struck.

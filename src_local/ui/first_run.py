@@ -1,57 +1,39 @@
 """First-run wizard for LIL BRO LOCAL.
 
-A multi-step flow that walks new users through:
-1. Hardware detection (GPU, VRAM, RAM)
-2. Ollama detection + install guidance
-3. Model selection with quick-pull buttons (3B / 7B / 14B)
-4. Model download with progress bar
-5. Launch into the main dual-pane screen
-
-This replaces the simple StartupScreen for first-time users.
+Option C flow:
+  1. Detect hardware (GPU, VRAM, RAM)
+  2. Check Ollama API → if responding, use it (don't touch it)
+  3. If not responding, binary installed → start headless
+  4. If not installed → show Install button (user decides)
+  5. Model picker → pull via API with progress bar
+  6. On exit → only kill Ollama if WE started it
 """
 
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING
 
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Center, Vertical, Horizontal
 from textual.screen import Screen
-from textual.widgets import Button, Label, Static, ProgressBar
+from textual.widgets import Button, Static, ProgressBar
 
 from src_local.agents.hardware import HardwareInfo, detect_hardware, score_model_fit
 from src_local.agents.ollama_install import (
     OllamaStatus,
     detect_ollama,
-    get_install_instructions,
     install_ollama,
     pull_model,
     start_ollama_serve,
 )
 
 
-# ── Model catalog (quick-pick entries) ─────────────────────────
-# These are the models shown as one-click buttons. Full catalog
-# lives in catalog.yaml; this is the curated subset for first-run.
+# ── Model catalog ─────────────────────────────────────────────
 
 QUICK_MODELS = [
     {
-        "id": "qwen2.5-coder:3b",
-        "display": "Qwen 2.5 Coder 3B",
-        "size": "2.3 GB",
-        "speed": "Fast",
-        "tier": "Mid",
-        "min_vram": 4,
-        "min_ram": 8,
-        "cpu_ok": True,
-        "license": "Qwen Research (non-commercial)",
-        "commercial": False,
-        "notes": "Best quality at small size. Personal/learning use only.",
-    },
-    {
-        "id": "qwen2.5-coder:7b",
+        "tag": "qwen2.5-coder:7b",
         "display": "Qwen 2.5 Coder 7B",
         "size": "4.7 GB",
         "speed": "Medium",
@@ -61,158 +43,271 @@ QUICK_MODELS = [
         "cpu_ok": False,
         "license": "Apache 2.0",
         "commercial": True,
-        "notes": "Recommended main driver. Commercial-clean.",
+        "notes": "Recommended. Commercial-clean.",
     },
     {
-        "id": "qwen2.5-coder:14b",
+        "tag": "qwen2.5-coder:3b",
+        "display": "Qwen 2.5 Coder 3B",
+        "size": "2.3 GB",
+        "speed": "Fast",
+        "tier": "Lite",
+        "min_vram": 4,
+        "min_ram": 8,
+        "cpu_ok": True,
+        "license": "non-commercial",
+        "commercial": False,
+        "notes": "Lower quality. Personal/learning use only.",
+    },
+    {
+        "tag": "qwen2.5-coder:14b",
         "display": "Qwen 2.5 Coder 14B",
         "size": "8.5 GB",
-        "speed": "Medium",
+        "speed": "Slower",
         "tier": "Premium",
         "min_vram": 10,
         "min_ram": 24,
         "cpu_ok": False,
         "license": "Apache 2.0",
         "commercial": True,
-        "notes": "Best quality for serious work. Needs 10+ GB VRAM.",
+        "notes": "Best quality. Needs 10+ GB VRAM.",
     },
 ]
 
+# Map button ID → model tag.  Built once at import time.
+_MODEL_BY_BTN: dict[str, str] = {}
 
-LOGO = r"""
-  _     ___ _       ____  ____   ___
- | |   |_ _| |     | __ )|  _ \ / _ \
- | |    | || |     |  _ \| |_) | | | |
- | |___ | || |___  | |_) |  _ <| |_| |
- |_____|___|_____| |____/|_| \_\\___/
-           L O C A L   M O D E
-"""
+def _btn_id(tag: str) -> str:
+    """Convert a model tag to a safe button ID."""
+    safe = tag.replace(":", "--").replace(".", "-")
+    return f"pull-{safe}"
+
+
+for _m in QUICK_MODELS:
+    _MODEL_BY_BTN[_btn_id(_m["tag"])] = _m["tag"]
+
+
+# ── ASCII logo (matches cloud LIL BRO style) ─────────────────
+
+LOGO_THE = (
+    " _____ _   _ _____ \n"
+    "|_   _| | | | ____|\n"
+    "  | | | |_| |  _|  \n"
+    "  | | |  _  | |___ \n"
+    "  |_| |_| |_|_____|"
+)
+
+LOGO_BROS = (
+    " ____  ____   ___  ____  \n"
+    "| __ )|  _ \\ / _ \\/ ___| \n"
+    "|  _ \\| |_) | | | \\___ \\ \n"
+    "| |_) |  _ <| |_| |___) |\n"
+    "|____/|_| \\_\\\\___/|____/ "
+)
 
 
 class FirstRunScreen(Screen):
-    """Multi-step first-run wizard."""
+    """First-run wizard — Option C."""
+
+    DEFAULT_CSS = """
+    FirstRunScreen {
+        align: center middle;
+        background: #1A1A1A;
+    }
+    """
 
     BINDINGS = [
+        Binding("enter", "continue", "Continue", priority=True),
         Binding("q", "quit_app", "Quit"),
         Binding("ctrl+q", "quit_app", "Quit", show=False),
     ]
 
-    def __init__(self, ollama_url: str = "http://127.0.0.1:11434", **kwargs):
+    def __init__(
+        self,
+        ollama_url: str = "http://127.0.0.1:11434",
+        **kwargs,
+    ):
         super().__init__(**kwargs)
         self._ollama_url = ollama_url
         self._hw: HardwareInfo | None = None
         self._ollama: OllamaStatus | None = None
         self._pulling = False
+        self._ready = False
+        self._we_started_ollama = False
+
+    # ── Layout (renders instantly) ───────────────────────────
 
     def compose(self) -> ComposeResult:
         with Center():
-            with Vertical(id="wizard-box"):
-                yield Static(LOGO, id="wizard-logo")
-                yield Static("", id="wizard-step")
-                yield Static("", id="wizard-hw")
-                yield Static("", id="wizard-ollama-status")
-                yield Static("", id="wizard-instructions")
+            with Vertical(id="startup-box"):
+                yield Static(LOGO_THE, id="logo-the")
+                yield Static(LOGO_BROS, id="logo-bros")
+                yield Static("local-model coding TUI", id="subtitle")
 
-                # Ollama install buttons.
-                with Horizontal(id="ollama-buttons", classes="button-row hidden"):
-                    yield Button(
-                        "Install Ollama Now", id="btn-install-ollama", variant="success"
-                    )
-                    yield Button(
-                        "Retry Detection", id="btn-retry-ollama"
-                    )
-                    yield Button(
-                        "Skip (offline)", id="btn-skip-ollama", variant="warning"
-                    )
+                yield Static("· detecting hardware...", id="status-hw",
+                             classes="status-line status-pending")
+                yield Static("· checking Ollama...", id="status-ollama",
+                             classes="status-line status-pending")
+                yield Static("", id="status-models",
+                             classes="status-line hidden")
 
-                # Model pick buttons.
-                yield Static("", id="wizard-model-header", classes="hidden")
-                with Vertical(id="model-buttons", classes="hidden"):
-                    pass  # Populated dynamically.
+                # Install button (hidden unless needed).
+                with Horizontal(id="action-row", classes="hidden"):
+                    yield Button("Install Ollama", id="btn-install",
+                                 variant="success")
 
-                # Progress bar for model pull.
+                # Model cards (hidden until needed).
+                with Vertical(id="model-section", classes="hidden"):
+                    pass
+
+                # Pull progress (hidden until needed).
                 yield Static("", id="pull-status", classes="hidden")
-                yield ProgressBar(id="pull-progress", total=100, classes="hidden")
+                yield ProgressBar(id="pull-bar", total=100, classes="hidden")
 
-                # Final continue.
-                yield Button(
-                    "Continue", id="btn-continue", variant="success", classes="hidden"
-                )
+                yield Static("", id="hint")
 
-    async def on_mount(self) -> None:
-        self._update("wizard-step", "Step 1/3 — Detecting hardware...")
-        await self._detect_hardware()
+    def on_mount(self) -> None:
+        self.run_worker(self._probe_all(), exclusive=True)
 
-    async def _detect_hardware(self) -> None:
+    # ── Main probe flow ──────────────────────────────────────
+
+    async def _probe_all(self) -> None:
+        # Step 1: Hardware.
         self._hw = await detect_hardware()
-        self._update("wizard-hw", f"Hardware detected:\n{self._hw.summary()}")
-        self._update("wizard-step", "Step 2/3 — Checking Ollama...")
+        self._set_status("status-hw", "ok",
+                         f"✓ {self._hw.summary()}")
+
+        # Step 2: Ollama.
         await self._check_ollama()
+
+        # User always sees the landing page and presses Enter to launch.
 
     async def _check_ollama(self) -> None:
         self._ollama = await detect_ollama(self._ollama_url)
 
-        if self._ollama.needs_install:
-            self._update(
-                "wizard-ollama-status",
-                "Ollama is NOT installed.\n"
-                "LIL BRO LOCAL needs Ollama to run local AI models.",
-            )
-            self._update(
-                "wizard-instructions",
-                get_install_instructions(),
-            )
-            self._show("ollama-buttons")
+        # Case A: Already running (user or system started it).
+        if self._ollama.running:
+            v = self._ollama.version or "unknown"
+            self._set_status("status-ollama", "ok",
+                             f"✓ Ollama v{v} — running")
+            await self._handle_models()
             return
 
-        if self._ollama.needs_start:
-            self._update(
-                "wizard-ollama-status",
-                f"Ollama found at: {self._ollama.path}\n"
-                "But the Ollama service is NOT running.",
-            )
-            self._update(
-                "wizard-instructions",
-                "Click 'Start Ollama' to launch it, or run manually:\n\n"
-                "  ollama serve",
-            )
-            self._show("ollama-buttons")
+        # Case B: Installed but not running → start headless.
+        if self._ollama.installed:
+            self._set_status("status-ollama", "pending",
+                             "· starting Ollama (headless)...")
+            self._set_hint("Starting Ollama daemon...")
+
+            started, msg = await start_ollama_serve(hw=self._hw)
+            if started:
+                self._we_started_ollama = True
+                self._ollama = await detect_ollama(self._ollama_url)
+                v = self._ollama.version or "unknown"
+                self._set_status("status-ollama", "ok",
+                                 f"✓ Ollama v{v} — running (headless)")
+                await self._handle_models()
+            else:
+                self._set_status("status-ollama", "err",
+                                 f"✗ could not start: {msg}")
+                self._set_hint(f"{msg}\n\nTry: ollama serve\n[Q to quit]")
+            return
+
+        # Case C: Not installed → show install button.
+        self._set_status("status-ollama", "err",
+                         "✗ Ollama not installed")
+        self._show("action-row")
+        self._set_hint(
+            "Ollama is required to run local models.\n"
+            "Click 'Install Ollama' to install via winget."
+        )
+
+    async def _handle_models(self) -> None:
+        self._show("status-models")
+
+        if self._ollama.models:
+            names = ", ".join(self._ollama.models[:5])
+            if len(self._ollama.models) > 5:
+                names += f" (+{len(self._ollama.models) - 5} more)"
+            self._set_status("status-models", "ok", f"✓ models: {names}")
+            self._ready = True
+            self._set_hint("[press ENTER to continue · Q to quit]")
+        else:
+            self._set_status("status-models", "pending",
+                             "· no models installed — pick one below")
+            await self._build_model_picker()
+
+    # ── Button handler ───────────────────────────────────────
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        bid = event.button.id
+
+        if bid == "btn-install":
+            event.button.disabled = True
+            event.button.label = "Installing..."
+            self.run_worker(self._do_install())
+
+        elif bid in _MODEL_BY_BTN:
+            if not self._pulling:
+                self._pulling = True
+                tag = _MODEL_BY_BTN[bid]
+                self.run_worker(self._pull_model(tag))
+
+    def action_continue(self) -> None:
+        if self._ready:
+            self.app.open_dual_pane()  # type: ignore[attr-defined]
+
+    def action_quit_app(self) -> None:
+        self.app.exit()
+
+    # ── Install flow ─────────────────────────────────────────
+
+    async def _do_install(self) -> None:
+        self._set_status("status-ollama", "pending",
+                         "· installing Ollama...")
+
+        success, msg = await install_ollama(
+            on_status=lambda m: self._set_hint(m),
+        )
+
+        if not success:
+            self._set_status("status-ollama", "err",
+                             f"✗ install failed: {msg}")
+            self._set_hint(f"{msg}\n\n[Q to quit]")
             try:
-                btn = self.query_one("#btn-install-ollama", Button)
-                btn.label = "Start Ollama"
-                btn._start_only = True  # Flag so handler knows to just start, not install.
+                btn = self.query_one("#btn-install", Button)
+                btn.disabled = False
+                btn.label = "Retry Install"
             except Exception:
                 pass
             return
 
-        # Ollama is running.
-        version = self._ollama.version or "unknown"
-        model_count = len(self._ollama.models or [])
-        self._update(
-            "wizard-ollama-status",
-            f"Ollama v{version} — running\n"
-            f"Models installed: {model_count}",
-        )
+        # Installed — hide button, auto-start headless.
+        self._hide("action-row")
+        self._set_status("status-ollama", "pending",
+                         "· starting Ollama (headless)...")
+        self._set_hint("Starting Ollama daemon...")
 
-        if self._ollama.models:
-            model_list = ", ".join(self._ollama.models[:5])
-            if len(self._ollama.models) > 5:
-                model_list += f" (+{len(self._ollama.models) - 5} more)"
-            self._update("wizard-instructions", f"Available: {model_list}")
+        started, start_msg = await start_ollama_serve(hw=self._hw)
+        if started:
+            self._we_started_ollama = True
+            self._ollama = await detect_ollama(self._ollama_url)
+            v = self._ollama.version or "unknown"
+            self._set_status("status-ollama", "ok",
+                             f"✓ Ollama v{v} — running (headless)")
+            await self._handle_models()
+        else:
+            self._set_status("status-ollama", "err",
+                             f"✗ installed but won't start: {start_msg}")
+            self._set_hint(f"{start_msg}\n\nTry: ollama serve\n[Q to quit]")
 
-        # Move to model selection.
-        await self._show_model_picker()
+    # ── Model picker ─────────────────────────────────────────
 
-    async def _show_model_picker(self) -> None:
-        self._update("wizard-step", "Step 3/3 — Choose a model")
-        self._hide("ollama-buttons")
-
+    async def _build_model_picker(self) -> None:
         installed = set(self._ollama.models or [])
-
-        # Build model buttons dynamically.
-        container = self.query_one("#model-buttons", Vertical)
+        section = self.query_one("#model-section", Vertical)
 
         for model in QUICK_MODELS:
+            tag = model["tag"]
             score = score_model_fit(
                 min_vram_gb=model["min_vram"],
                 min_ram_gb=model["min_ram"],
@@ -220,186 +315,61 @@ class FirstRunScreen(Screen):
                 hw=self._hw,
             )
 
-            # Star rating.
-            if score >= 3:
-                stars = "★★★"
-            elif score >= 2:
-                stars = "★★"
-            elif score >= 1:
-                stars = "★"
-            else:
-                stars = "—"
+            stars = {3: "★★★", 2: "★★", 1: "★"}.get(score, "—")
+            lic = f"✓ {model['license']}" if model["commercial"] else f"⚠ {model['license']}"
+            is_installed = tag in installed
 
-            # License badge.
-            if model["commercial"]:
-                license_badge = f"✓ {model['license']}"
-            else:
-                license_badge = f"⚠ {model['license']}"
-
-            # Already installed?
-            is_installed = model["id"] in installed
-
-            label_parts = [
-                f"{model['display']}",
-                f"  {model['size']} · {model['speed']} · {model['tier']} tier",
-                f"  {stars} fit · {license_badge}",
-                f"  {model['notes']}",
-            ]
-            if is_installed:
-                label_parts[0] += "  ✅ INSTALLED"
-
-            info = Static("\n".join(label_parts), classes="model-info")
-            await container.mount(info)
-
-            if is_installed:
-                btn = Button(
-                    f"Use {model['display']}",
-                    id=f"btn-use-{model['id'].replace(':', '-').replace('.', '-')}",
-                    variant="success",
-                    classes="model-btn",
-                )
-                btn.model_tag = model["id"]
-                btn.action = "use"
-            elif score == 0:
-                btn = Button(
-                    f"Pull {model['display']} (not recommended)",
-                    id=f"btn-pull-{model['id'].replace(':', '-').replace('.', '-')}",
-                    variant="warning",
-                    classes="model-btn",
-                    disabled=True,
-                )
-                btn.model_tag = model["id"]
-                btn.action = "pull"
-            else:
-                btn = Button(
-                    f"Pull {model['display']} ({model['size']})",
-                    id=f"btn-pull-{model['id'].replace(':', '-').replace('.', '-')}",
-                    variant="primary",
-                    classes="model-btn",
-                )
-                btn.model_tag = model["id"]
-                btn.action = "pull"
-
-            await container.mount(btn)
-
-        # Show the container.
-        self._show("model-buttons")
-
-        # If any model is already installed, also show Continue.
-        if installed:
-            self._show("btn-continue")
-
-    def on_button_pressed(self, event: Button.Pressed) -> None:
-        btn = event.button
-
-        if btn.id == "btn-install-ollama":
-            btn.disabled = True
-            if getattr(btn, "_start_only", False):
-                self._update("wizard-instructions", "Starting Ollama daemon...")
-                self.run_worker(self._start_ollama_only())
-            else:
-                self._update("wizard-instructions", "Installing Ollama...")
-                self.run_worker(self._install_ollama())
-
-        elif btn.id == "btn-retry-ollama":
-            self._update("wizard-ollama-status", "Rechecking Ollama...")
-            self._update("wizard-instructions", "")
-            self._hide("ollama-buttons")
-            self.run_worker(self._check_ollama())
-
-        elif btn.id == "btn-skip-ollama":
-            self._update(
-                "wizard-instructions",
-                "Entering offline mode. You can install Ollama later.",
+            # Info text.
+            info_text = (
+                f"{model['display']}"
+                + ("  ✅ INSTALLED" if is_installed else "")
+                + f"\n  {model['size']} · {model['speed']} · {model['tier']} tier"
+                + f"\n  {stars} fit · {lic}"
+                + f"\n  {model['notes']}"
             )
-            self._hide("ollama-buttons")
-            self._show("btn-continue")
 
-        elif btn.id == "btn-continue":
-            self.app.pop_screen()
+            card = Vertical(classes="model-card")
+            await section.mount(card)
+            await card.mount(Static(info_text))
 
-        elif hasattr(btn, "model_tag"):
-            if getattr(btn, "action", "") == "use":
-                # Already installed — set as active and continue.
-                self._set_active_model(btn.model_tag)
-                self.app.pop_screen()
-            elif getattr(btn, "action", "") == "pull":
-                if not self._pulling:
-                    self._pulling = True
-                    self.run_worker(self._pull_model(btn.model_tag))
+            bid = _btn_id(tag)
 
-    async def _start_ollama_only(self) -> None:
-        """Just start the Ollama daemon (already installed)."""
-        started, msg = await start_ollama_serve()
-        if started:
-            self._update("wizard-instructions", "Ollama is running!")
-            self._hide("ollama-buttons")
-            await asyncio.sleep(1)
-            await self._check_ollama()
-        else:
-            self._update("wizard-instructions", f"{msg}\n\nTry manually: ollama serve")
-            try:
-                self.query_one("#btn-install-ollama", Button).disabled = False
-            except Exception:
+            if is_installed:
+                # Already pulled — no button needed, can just continue.
                 pass
-
-    async def _install_ollama(self) -> None:
-        """Install Ollama via system package manager, then start it."""
-        def on_status(msg: str) -> None:
-            try:
-                self._update("wizard-instructions", msg)
-            except Exception:
-                pass
-
-        success, message = await install_ollama(on_status=on_status)
-
-        if success:
-            self._update("wizard-ollama-status", "Ollama installed!")
-            self._update("wizard-instructions", message)
-
-            # Try to start the Ollama daemon.
-            self._update("wizard-instructions", message + "\n\nStarting Ollama daemon...")
-            started, start_msg = await start_ollama_serve()
-
-            if started:
-                self._update("wizard-instructions", "Ollama is running! Moving to model selection...")
-                await asyncio.sleep(1)
-                # Re-run detection to pick up the running daemon.
-                self._hide("ollama-buttons")
-                await self._check_ollama()
+            elif score == 0:
+                btn = Button(f"Pull {model['display']} (not recommended)",
+                             id=bid, variant="warning", disabled=True)
+                await card.mount(btn)
             else:
-                self._update(
-                    "wizard-instructions",
-                    f"{message}\n\n{start_msg}\n\n"
-                    "Start it manually with: ollama serve\n"
-                    "Then click 'Retry Detection'.",
-                )
-                try:
-                    self.query_one("#btn-install-ollama", Button).disabled = True
-                    self.query_one("#btn-install-ollama", Button).label = "Installed"
-                except Exception:
-                    pass
+                btn = Button(f"Pull {model['display']} ({model['size']})",
+                             id=bid, variant="primary")
+                await card.mount(btn)
+
+        self._show("model-section")
+
+        if installed:
+            self._ready = True
+            self._set_hint("[press ENTER to continue · Q to quit]")
         else:
-            self._update("wizard-ollama-status", "Installation failed")
-            self._update("wizard-instructions", message)
-            # Re-enable the button so they can try again.
-            try:
-                self.query_one("#btn-install-ollama", Button).disabled = False
-            except Exception:
-                pass
+            self._set_hint("Pick a model to download · Q to quit")
+
+    # ── Model pull ───────────────────────────────────────────
 
     async def _pull_model(self, model_tag: str) -> None:
-        """Pull a model with progress display."""
-        self._update("pull-status", f"Pulling {model_tag}...")
+        self._set_text("pull-status", f"Pulling {model_tag}...")
         self._show("pull-status")
-        self._show("pull-progress")
+        self._show("pull-bar")
 
-        progress = self.query_one("#pull-progress", ProgressBar)
-        progress.update(progress=0)
+        bar = self.query_one("#pull-bar", ProgressBar)
+        bar.update(progress=0)
 
-        # Disable all model buttons during pull.
-        for btn in self.query(".model-btn"):
-            btn.disabled = True
+        # Disable all pull buttons.
+        for bid in _MODEL_BY_BTN:
+            try:
+                self.query_one(f"#{bid}", Button).disabled = True
+            except Exception:
+                pass
 
         last_status = ""
 
@@ -408,60 +378,76 @@ class FirstRunScreen(Screen):
             if status != last_status:
                 last_status = status
                 try:
-                    self._update("pull-status", f"Pulling {model_tag}: {status}")
+                    self._set_text("pull-status",
+                                   f"Pulling {model_tag}: {status}")
                 except Exception:
                     pass
             if total > 0:
                 pct = min(100, int(completed / total * 100))
                 try:
-                    progress.update(progress=pct)
+                    bar.update(progress=pct)
                 except Exception:
                     pass
 
         success = await pull_model(
-            model_tag, self._ollama_url, on_progress=on_progress
+            model_tag, self._ollama_url, on_progress=on_progress,
         )
 
         if success:
-            self._update("pull-status", f"✓ {model_tag} installed successfully!")
-            progress.update(progress=100)
-            self._set_active_model(model_tag)
-            self._show("btn-continue")
+            self._set_text("pull-status", f"✓ {model_tag} pulled!")
+            bar.update(progress=100)
+
+            # Store selected model on app.
+            try:
+                self.app._selected_model = model_tag  # type: ignore[attr-defined]
+            except Exception:
+                pass
+
+            self._set_status("status-models", "ok", f"✓ model: {model_tag}")
+            self._ready = True
+            self._set_hint("[press ENTER to continue · Q to quit]")
         else:
-            self._update("pull-status", f"✗ Failed to pull {model_tag}. Try manually: ollama pull {model_tag}")
+            self._set_text("pull-status",
+                           f"✗ Failed to pull {model_tag}. Check connection.")
 
         self._pulling = False
 
         # Re-enable buttons.
-        for btn in self.query(".model-btn"):
-            btn.disabled = False
+        for bid in _MODEL_BY_BTN:
+            try:
+                self.query_one(f"#{bid}", Button).disabled = False
+            except Exception:
+                pass
 
-    def _set_active_model(self, model_tag: str) -> None:
-        """Store the selected model so the app uses it."""
+    # ── UI helpers ────────────────────────────────────────────
+
+    def _set_status(self, wid: str, level: str, text: str) -> None:
+        """Update a status-line widget: level is 'ok', 'err', or 'pending'."""
         try:
-            self.app._selected_model = model_tag  # type: ignore[attr-defined]
+            w = self.query_one(f"#{wid}", Static)
+            w.remove_class("status-ok", "status-err", "status-pending")
+            w.add_class(f"status-{level}")
+            w.update(text)
         except Exception:
             pass
 
-    def _update(self, widget_id: str, text: str) -> None:
+    def _set_text(self, wid: str, text: str) -> None:
         try:
-            w = self.query_one(f"#{widget_id}")
-            if isinstance(w, (Static, Label)):
-                w.update(text)
+            self.query_one(f"#{wid}", Static).update(text)
         except Exception:
             pass
 
-    def _show(self, widget_id: str) -> None:
+    def _set_hint(self, text: str) -> None:
+        self._set_text("hint", text)
+
+    def _show(self, wid: str) -> None:
         try:
-            self.query_one(f"#{widget_id}").remove_class("hidden")
+            self.query_one(f"#{wid}").remove_class("hidden")
         except Exception:
             pass
 
-    def _hide(self, widget_id: str) -> None:
+    def _hide(self, wid: str) -> None:
         try:
-            self.query_one(f"#{widget_id}").add_class("hidden")
+            self.query_one(f"#{wid}").add_class("hidden")
         except Exception:
             pass
-
-    def action_quit_app(self) -> None:
-        self.app.exit()

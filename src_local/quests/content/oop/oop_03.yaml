@@ -1,0 +1,17 @@
+id: oop_03
+area: oop
+title: The Battle Cry
+type: retype
+concept_tags:
+- methods
+xp: 25
+story: Every knight has a signature yell.
+task: Add a method `cry` that returns 'for the king!'.
+solution: "class Knight:\n    def cry(self):\n        return \"for the king!\""
+hints:
+- 'def cry(self):'
+- use return
+- lowercase string
+bonus_xp_no_hints: 5
+time_par_seconds: 120
+debrief: Well struck.

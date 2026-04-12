@@ -1,7 +1,11 @@
-/* LIL BRO LOCAL — Textual CSS */
+/* LIL BRO LOCAL — Textual CSS
+   Dual-pane layout with active/inactive border states.
+   Green (#A8D840) + orange (#E8A838) + sky-blue (#6EC8E8) theme.
+   Merged from cloud LIL BRO + local-only startup/model picker styles. */
 
 Screen {
-    background: #1A1A1A;
+    background: #121212;
+    color: #E8E8E8;
 }
 
 /* ── Hidden helper ─────────────────────────────────── */
@@ -10,215 +14,275 @@ Screen {
     display: none;
 }
 
-/* ── First-run wizard ──────────────────────────────── */
+/* ═══════════════════════════════════════════════════
+   First-run / startup screen (local-only)
+   ═══════════════════════════════════════════════════ */
 
-#wizard-box {
-    width: 70;
+FirstRunScreen {
+    align: center middle;
+    background: #1A1A1A;
+}
+
+#startup-box {
+    width: 64;
     height: auto;
-    max-height: 90%;
-    padding: 1 2;
-    border: round #A8D840;
-    background: #111111;
-    overflow-y: auto;
+    border: round #3A3A3A;
+    padding: 2 4;
+    background: #1A1A1A;
+    align: center middle;
 }
 
-#wizard-logo {
-    text-align: center;
-    color: #A8D840;
-    text-style: bold;
-    margin-bottom: 1;
-}
-
-#wizard-step {
-    text-align: center;
-    color: #E8A838;
-    text-style: bold;
-    margin-bottom: 1;
-}
-
-#wizard-hw {
-    color: #6EC8E8;
-    margin-bottom: 1;
-}
-
-#wizard-ollama-status {
-    color: #E8E8E8;
-    margin-bottom: 1;
-}
-
-#wizard-instructions {
-    color: #888888;
-    margin-bottom: 1;
-}
-
-.button-row {
-    height: auto;
-    margin-bottom: 1;
-}
-
-.button-row Button {
-    margin: 0 1;
-}
-
-#wizard-model-header {
-    color: #A8D840;
-    text-style: bold;
-    margin-bottom: 1;
-}
-
-/* Model cards */
-.model-info {
-    color: #CCCCCC;
-    padding: 0 1;
-    margin-bottom: 0;
-}
-
-.model-btn {
+#logo-the {
     width: 100%;
+    content-align: center middle;
+    color: #A8D840;
+    text-style: bold;
+}
+
+#logo-bros {
+    width: 100%;
+    content-align: center middle;
+    color: #E8A838;
+    text-style: bold;
     margin-bottom: 1;
 }
 
-#pull-status {
-    color: #E8A838;
-    text-align: center;
+#subtitle {
+    width: 100%;
+    content-align: center middle;
+    color: #A8D840;
+    margin-bottom: 2;
+}
+
+.status-line {
+    width: 100%;
+    padding: 0 2;
+}
+
+.status-ok {
+    color: #A8D840;
+}
+
+.status-err {
+    color: #E85050;
+}
+
+.status-pending {
+    color: #888888;
+}
+
+/* ── Install / action row ─────────────────────────── */
+
+#action-row {
+    height: auto;
+    width: 100%;
+    align: center middle;
     margin: 1 0;
 }
 
-#pull-progress {
-    margin: 0 2 1 2;
+#action-row Button {
+    margin: 0 1;
 }
 
-#btn-continue {
+/* ── Model cards ──────────────────────────────────── */
+
+#model-section {
     width: 100%;
-    margin-top: 1;
-}
-
-#btn-download-ollama {
-    width: 1fr;
-}
-
-#btn-retry-ollama {
-    width: 1fr;
-}
-
-#btn-skip-ollama {
-    width: 1fr;
-}
-
-/* ── Startup screen (legacy) ───────────────────────── */
-
-#startup-box {
-    width: 60;
     height: auto;
-    padding: 1 2;
-    border: round #A8D840;
-    background: #111111;
+    margin: 1 0;
 }
 
-#logo {
-    text-align: center;
-    color: #A8D840;
-    text-style: bold;
-    margin-bottom: 1;
-}
-
-#status-label {
-    text-align: center;
-    color: #E8E8E8;
-    margin-bottom: 1;
-}
-
-#models-label {
-    color: #888888;
-    margin-bottom: 1;
-}
-
-#instructions {
-    color: #E8A838;
-    margin-bottom: 1;
-}
-
-#continue-btn {
+.model-card {
     width: 100%;
+    height: auto;
+    padding: 0 2;
+    margin-bottom: 1;
+}
+
+.model-card Static {
+    color: #CCCCCC;
+}
+
+.model-card Button {
+    width: 100%;
+    margin-top: 0;
+}
+
+/* ── Pull progress ────────────────────────────────── */
+
+#pull-status {
+    width: 100%;
+    content-align: center middle;
+    color: #E8A838;
+    margin: 1 0 0 0;
+}
+
+#pull-bar {
+    width: 100%;
+    margin: 0 2;
+}
+
+/* ── Hint line ────────────────────────────────────── */
+
+#hint {
+    width: 100%;
+    content-align: center middle;
+    color: #888888;
     margin-top: 1;
 }
 
-/* ── Main dual-pane layout ─────────────────────────── */
+/* ═══════════════════════════════════════════════════
+   Main dual-pane screen
+   ═══════════════════════════════════════════════════ */
+
+DualPaneScreen {
+    layout: vertical;
+}
 
 #main-container {
     layout: horizontal;
     height: 1fr;
+    padding: 0;
 }
 
 /* ── Panels ────────────────────────────────────────── */
 
-BroAPanel {
-    width: 1fr;
-    border: solid #2A3518;
-    background: #111411;
+/* Lil Bro (Helper) — green theme — LEFT pane */
+LilBroPanel {
+    width: 50fr;
+    height: 100%;
+    padding: 0;
+    border: none;
+    background: #101612;
 }
 
-BroAPanel.active-panel {
-    border: solid #A8D840;
+LilBroPanel.active-panel {
+    border: round #A8D840;
+    background: #141C10;
 }
 
-BroBPanel {
-    width: 1fr;
-    border: solid #1A2E38;
-    background: #111418;
+/* Big Bro (Coder) — orange theme — RIGHT pane */
+BigBroPanel {
+    width: 50fr;
+    height: 100%;
+    padding: 0;
+    border: none;
+    background: #161310;
 }
 
-BroBPanel.active-panel {
-    border: solid #6EC8E8;
+BigBroPanel.active-panel {
+    border: round #E8A838;
+    background: #1C1710;
 }
 
-#panel-header {
+.panel-body {
+    height: 100%;
+    width: 100%;
+    layout: vertical;
+}
+
+.panel-header {
     height: 1;
-    text-align: center;
-    color: #888888;
-    text-style: bold;
+    width: 100%;
+    padding: 0 1;
     background: #1A1A1A;
+    content-align: left middle;
 }
 
-BroAPanel.active-panel #panel-header {
+LilBroPanel.active-panel .panel-header {
     color: #A8D840;
 }
 
-BroBPanel.active-panel #panel-header {
-    color: #6EC8E8;
+BigBroPanel.active-panel .panel-header {
+    color: #E8A838;
 }
 
-#log {
+.panel-log {
     height: 1fr;
+    width: 100%;
+    padding: 0 2;
+    background: #121212;
+    color: #E8E8E8;
     scrollbar-size: 1 1;
+    scrollbar-background: #121212;
+    scrollbar-background-hover: #1A1A1A;
 }
 
-#stream-preview {
+LilBroPanel .panel-log {
+    background: #0E1410;
+    scrollbar-color: #5B7522;
+    scrollbar-color-hover: #A8D840;
+}
+
+BigBroPanel .panel-log {
+    background: #14110E;
+    scrollbar-color: #8B5A1E;
+    scrollbar-color-hover: #E8A838;
+}
+
+.panel-stream {
+    width: 100%;
     height: auto;
+    min-height: 0;
     max-height: 3;
-    color: #888888;
     padding: 0 1;
+    background: #121212;
+    overflow-x: hidden;
+    overflow-y: hidden;
 }
 
-/* ── Status bar ────────────────────────────────────── */
+.panel-pacman {
+    height: 1;
+    width: 100%;
+    background: #0A0A0A;
+    padding: 0 0;
+}
+
+LilBroPanel .panel-pacman {
+    background: #080D08;
+}
+
+BigBroPanel .panel-pacman {
+    background: #100D08;
+}
+
+/* ═══════════════════════════════════════════════════
+   Status bar
+   ═══════════════════════════════════════════════════ */
 
 StatusBar {
     height: 1;
-    dock: bottom;
-    background: #1A1A1A;
+    layout: horizontal;
+    background: #0E0E0E;
     color: #888888;
     padding: 0 1;
+}
+
+#status-focus {
+    width: 1fr;
+    color: #A8D840;
+    content-align: left middle;
 }
 
 #status-model {
     width: auto;
     color: #A8D840;
+    content-align: left middle;
 }
 
 #status-busy {
-    width: 1fr;
-    text-align: center;
+    width: auto;
+    color: #E8E038;
+    content-align: center middle;
+    padding: 0 2;
+    text-style: italic;
+}
+
+#status-journal {
+    width: auto;
     color: #E8A838;
+    content-align: right middle;
+    padding-left: 2;
 }
 
 #status-info {
@@ -226,25 +290,350 @@ StatusBar {
     color: #666666;
 }
 
-/* ── Input bar ─────────────────────────────────────── */
+#status-xp {
+    color: #A8D840;
+    content-align: right middle;
+    padding: 0 1;
+}
+
+/* ═══════════════════════════════════════════════════
+   Input bar
+   ═══════════════════════════════════════════════════ */
 
 InputBar {
     height: auto;
-    dock: bottom;
-    background: #1A1A1A;
+    layout: vertical;
+    background: #0E0E0E;
+    border-top: solid #2A2A2A;
 }
 
 #input-row {
     height: 3;
+    layout: horizontal;
 }
 
 #input-prefix {
-    width: auto;
-    padding: 1 1;
+    width: 14;
+    height: 3;
+    content-align: center middle;
+    text-style: bold;
+    background: #1A1A1A;
+}
+
+#input-prefix.big {
+    color: #E8A838;
+    background: #1A1510;
+}
+
+#input-prefix.bro {
+    color: #A8D840;
+    background: #151A10;
+}
+
+#input-field, #user-input {
+    width: 1fr;
+    height: 3;
+    background: #0E0E0E;
+    color: #E8E8E8;
+    border: round #2A2A2A;
+    padding: 0 1;
+}
+
+#input-field.target-big, #input-field.target-big:focus {
+    border: round #E8A838;
+    background: #0E0E0E;
+}
+
+#input-field.target-bro, #input-field.target-bro:focus {
+    border: round #A8D840;
+    background: #0E0E0E;
+}
+
+#input-field:focus, #user-input:focus {
+    background: #0E0E0E;
+}
+
+/* ═══════════════════════════════════════════════════
+   Command palette (inline slash picker)
+   ═══════════════════════════════════════════════════ */
+
+CommandPalette {
+    height: auto;
+    max-height: 14;
+    width: 100%;
+    background: #161616;
+    border-top: solid #2A2A2A;
+    border-left: solid #2A2A2A;
+    border-right: solid #2A2A2A;
+    padding: 0 1;
+    layout: vertical;
+}
+
+#palette-header {
+    width: 100%;
+    height: 1;
+    color: #888888;
+    padding: 0 1;
+    background: #0E0E0E;
+}
+
+#palette-hint {
+    width: 100%;
+    height: 0;
+    display: none;
+}
+
+.palette-row {
+    width: 100%;
+    height: 1;
+    padding: 0 1;
+    color: #CCCCCC;
+    background: #161616;
+}
+
+.palette-row.selected {
+    background: #2A3518;
+    color: #FFFFFF;
+    text-style: bold;
+}
+
+/* ═══════════════════════════════════════════════════
+   Help screen (modal)
+   ═══════════════════════════════════════════════════ */
+
+HelpScreen {
+    align: center middle;
+    background: #000000 60%;
+}
+
+#help-container {
+    width: 84;
+    height: auto;
+    max-height: 90%;
+    padding: 1 2;
+    background: #1A1A1A;
+    border: round #E8A838;
+}
+
+#help-title {
+    width: 100%;
+    content-align: center middle;
+    color: #E8A838;
+    text-style: bold;
+    margin-bottom: 1;
+}
+
+#help-subtitle {
+    width: 100%;
+    content-align: center middle;
+    color: #A8D840;
+    margin-bottom: 1;
+}
+
+.help-section-header {
+    width: 100%;
+    color: #E8A838;
+    text-style: bold underline;
+    margin-top: 1;
+    margin-bottom: 1;
+}
+
+.help-table {
+    width: 100%;
+    color: #E8E8E8;
+    padding-left: 2;
+}
+
+#help-footer {
+    width: 100%;
+    content-align: center middle;
+    color: #666666;
+    margin-top: 1;
+}
+
+/* ═══════════════════════════════════════════════════
+   Compose modal (F3 multi-line input)
+   ═══════════════════════════════════════════════════ */
+
+ComposeScreen {
+    align: center middle;
+    background: #000000 60%;
+}
+
+#compose-container {
+    width: 90;
+    height: 24;
+    max-height: 90%;
+    padding: 1 2;
+    background: #1A1A1A;
+    border: round #A8D840;
+}
+
+#compose-title {
+    width: 100%;
+    content-align: center middle;
+    color: #A8D840;
+    text-style: bold;
+    margin-bottom: 1;
+}
+
+#compose-subtitle {
+    width: 100%;
+    content-align: center middle;
+    color: #888888;
+    margin-bottom: 1;
+}
+
+#compose-textarea {
+    width: 100%;
+    height: 1fr;
+    background: #0E0E0E;
+    color: #E8E8E8;
+    border: round #3A3A3A;
+}
+
+#compose-textarea:focus {
+    border: round #A8D840;
+}
+
+#compose-footer {
+    width: 100%;
+    content-align: center middle;
+    color: #666666;
+    margin-top: 1;
+}
+
+/* ═══════════════════════════════════════════════════
+   Search modal (Ctrl+F find-in-panel)
+   ═══════════════════════════════════════════════════ */
+
+SearchScreen {
+    align: center top;
+    background: #000000 40%;
+}
+
+#search-container {
+    width: 72;
+    height: auto;
+    margin-top: 2;
+    padding: 1 2;
+    background: #1A1A1A;
+    border: round #C878E8;
+}
+
+#search-title {
+    width: 100%;
+    content-align: left middle;
+    color: #C878E8;
+    text-style: bold;
+    margin-bottom: 1;
+}
+
+#search-row {
+    width: 100%;
+    height: 3;
+    layout: horizontal;
+}
+
+#search-input {
+    width: 1fr;
+    height: 3;
+    background: #0E0E0E;
+    color: #E8E8E8;
+    border: round #3A3A3A;
+}
+
+#search-input:focus {
+    border: round #C878E8;
+}
+
+#search-count {
+    width: 20;
+    height: 3;
+    content-align: center middle;
+    color: #888888;
+    padding: 0 1;
+}
+
+#search-footer {
+    width: 100%;
+    content-align: center middle;
+    color: #666666;
+    margin-top: 1;
+}
+
+/* ═══════════════════════════════════════════════════
+   Campaign map (modal)
+   ═══════════════════════════════════════════════════ */
+
+CampaignMapScreen {
+    align: center middle;
+    background: #000000 60%;
+}
+
+#campaign-container {
+    width: 100;
+    height: auto;
+    max-height: 90%;
+    padding: 1 2;
+    background: #1A1A1A;
+    border: round #A8D840;
+}
+
+#campaign-title {
+    width: 100%;
+    content-align: center middle;
+    color: #A8D840;
+    text-style: bold;
+    height: 1;
+    margin-bottom: 1;
+}
+
+#campaign-columns {
+    width: 100%;
+    height: 20;
+    layout: horizontal;
+}
+
+#area-list {
+    width: 32;
+    height: 100%;
+    background: #111111;
+    border: round #3A3A3A;
+    margin-right: 1;
+}
+
+#quest-list {
+    width: 1fr;
+    height: 100%;
+    background: #111111;
+    border: round #3A3A3A;
+}
+
+#campaign-footer {
+    width: 100%;
+    content-align: center middle;
+    color: #666666;
+    height: 1;
+    margin-top: 1;
+}
+
+CampaignMapScreen ListItem {
+    padding: 0 1;
+    color: #CCCCCC;
+}
+
+CampaignMapScreen ListItem.--highlight {
+    background: #2A3518;
     color: #A8D840;
     text-style: bold;
 }
 
-#user-input {
-    width: 1fr;
+/* ═══════════════════════════════════════════════════
+   Level-up flash + XP bar
+   ═══════════════════════════════════════════════════ */
+
+.level-up-flash {
+    background: #223311;
+    border: thick #A8D840;
 }

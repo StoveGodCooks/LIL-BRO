@@ -1,0 +1,19 @@
+id: async_03
+area: async
+title: Run the Event Loop
+type: retype
+concept_tags:
+- asyncio.run
+xp: 25
+story: The engine starts when you call run.
+task: Use asyncio.run to run hello().
+solution: 'import asyncio
+
+  asyncio.run(hello())'
+hints:
+- import asyncio first
+- asyncio.run takes a coroutine
+- call hello() inside
+bonus_xp_no_hints: 5
+time_par_seconds: 120
+debrief: Well struck.

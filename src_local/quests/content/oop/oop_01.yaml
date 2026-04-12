@@ -1,0 +1,17 @@
+id: oop_01
+area: oop
+title: The First Class
+type: retype
+concept_tags:
+- class
+xp: 20
+story: Every keep needs a blueprint.
+task: Define an empty class named `Knight`.
+solution: "class Knight:\n    pass"
+hints:
+- class then the name
+- colon at the end
+- '`pass` as the body'
+bonus_xp_no_hints: 5
+time_par_seconds: 90
+debrief: Well struck.

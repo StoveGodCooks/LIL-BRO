@@ -1,0 +1,19 @@
+id: cave_02
+area: cave
+title: The Naming Rite
+type: retype
+concept_tags:
+- variables
+xp: 20
+story: Two runes this time — one for your name, one for your age.
+task: Retype the two assignments.
+solution: 'name = "lil bro"
+
+  age = 10'
+hints:
+- strings use quotes
+- age is a bare number
+- two lines total
+bonus_xp_no_hints: 5
+time_par_seconds: 90
+debrief: Well struck.

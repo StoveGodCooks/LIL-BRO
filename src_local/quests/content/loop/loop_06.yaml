@@ -1,0 +1,17 @@
+id: loop_06
+area: loop
+title: Continue Past the Stones
+type: retype
+concept_tags:
+- continue
+xp: 30
+story: Skip every stone marked odd.
+task: Loop over 0..4 and print only the even ones using continue.
+solution: "for n in range(5):\n    if n % 2:\n        continue\n    print(n)"
+hints:
+- n % 2 is truthy for odd
+- continue skips to next iter
+- print after the guard
+bonus_xp_no_hints: 5
+time_par_seconds: 150
+debrief: Well struck.

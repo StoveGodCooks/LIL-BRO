@@ -1,0 +1,17 @@
+id: marsh_01
+area: marsh
+title: Try the Bridge
+type: retype
+concept_tags:
+- try
+xp: 20
+story: Before you cross, prepare to catch yourself.
+task: Wrap `risky()` in a try/except that passes on Exception.
+solution: "try:\n    risky()\nexcept Exception:\n    pass"
+hints:
+- 'try: starts the block'
+- 'except Exception:'
+- pass in the handler
+bonus_xp_no_hints: 5
+time_par_seconds: 90
+debrief: Well struck.

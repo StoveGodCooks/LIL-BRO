@@ -1,0 +1,71 @@
+areas:
+- id: cave
+  name: The Cave
+  description: Python basics. Variables, functions, the building blocks.
+  quests:
+  - cave_01
+  - cave_02
+  - cave_03
+  - cave_04
+  - cave_05
+  - cave_06
+  - cave_07
+  - cave_08
+  boss: ''
+  unlock_requires: ''
+- id: loop
+  name: Loop Labyrinth
+  description: Iteration — for, while, range, zip, and friends.
+  quests:
+  - loop_01
+  - loop_02
+  - loop_03
+  - loop_04
+  - loop_05
+  - loop_06
+  - loop_07
+  - loop_08
+  boss: ''
+  unlock_requires: cave
+- id: oop
+  name: The OOP Keep
+  description: Classes, inheritance, dunder methods.
+  quests:
+  - oop_01
+  - oop_02
+  - oop_03
+  - oop_04
+  - oop_05
+  - oop_06
+  - oop_07
+  - oop_08
+  boss: ''
+  unlock_requires: loop
+- id: async
+  name: Async Expanse
+  description: async/await, coroutines, the event loop.
+  quests:
+  - async_01
+  - async_02
+  - async_03
+  - async_04
+  - async_05
+  - async_06
+  - async_07
+  - async_08
+  boss: ''
+  unlock_requires: oop
+- id: marsh
+  name: Error Marsh
+  description: Exceptions, try/except, defensive coding.
+  quests:
+  - marsh_01
+  - marsh_02
+  - marsh_03
+  - marsh_04
+  - marsh_05
+  - marsh_06
+  - marsh_07
+  - marsh_08
+  boss: legacy_codebase
+  unlock_requires: async

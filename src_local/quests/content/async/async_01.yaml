@@ -1,0 +1,17 @@
+id: async_01
+area: async
+title: The First Coroutine
+type: retype
+concept_tags:
+- async def
+xp: 20
+story: The Expanse begins with a single async breath.
+task: 'Define `async def hello(): return ''hi''`.'
+solution: "async def hello():\n    return \"hi\""
+hints:
+- start with async def
+- return a string
+- indent the body
+bonus_xp_no_hints: 5
+time_par_seconds: 90
+debrief: Well struck.

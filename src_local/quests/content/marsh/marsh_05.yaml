@@ -1,0 +1,17 @@
+id: marsh_05
+area: marsh
+title: Custom Sigil
+type: retype
+concept_tags:
+- custom exception
+xp: 30
+story: Mint your own exception class.
+task: 'Define class BogError(Exception): pass.'
+solution: "class BogError(Exception):\n    pass"
+hints:
+- subclass Exception
+- parentheses around Exception
+- body is pass
+bonus_xp_no_hints: 5
+time_par_seconds: 150
+debrief: Well struck.
