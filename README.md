@@ -259,6 +259,33 @@ LiL BRO was built iteratively with a specific philosophy:
 
 ---
 
+## What's Coming: Punishment Mode
+
+**Punishment** is the next major feature in development. The idea: split the bros across machines.
+
+Right now both bros run on the same machine, talking to the same local Ollama instance. Punishment mode changes that:
+
+- **Big Bro stays home** — on your main dev machine with the GPU, the codebase, and the tools. He's the one with write access. He does the work.
+- **Lil Bro goes mobile** — runs on your laptop, tablet, or phone as a lightweight remote client. He connects to Big Bro over the network.
+
+The workflow: you're on the couch, on a train, at a coffee shop. You open Lil Bro on your phone. You tell him what to build. He relays instructions to Big Bro back at your desk. Big Bro writes the code, runs the tests, reports back. Lil Bro reviews the results and tells you what happened.
+
+It's remote pair programming where one partner is an AI that never sleeps and the other is you in your pajamas.
+
+**Architecture (planned):**
+```
+[Your phone / laptop]          [Your dev machine]
+  Lil Bro (client)  <--WS-->  Big Bro (server daemon)
+    - read-only view              - full filesystem access
+    - sends instructions          - executes code changes
+    - reviews results             - runs commands & tests
+    - asks Grandpa                - asks Grandpa
+```
+
+Why "Punishment"? Because Big Bro has to sit at the desk and work while Lil Bro gets to go outside. That's the punishment.
+
+---
+
 ## License
 
 MIT
