@@ -15,7 +15,7 @@ They share a workspace, they know about each other, and they will absolutely tal
 
 ![Status](https://img.shields.io/badge/status-beta-red)
 ![Python](https://img.shields.io/badge/python-3.11+-blue)
-![License](https://img.shields.io/badge/license-MIT-green)
+![License](https://img.shields.io/badge/license-PolyForm%20NC-blue)
 ![Ollama](https://img.shields.io/badge/powered%20by-Ollama-orange)
 ![Platform](https://img.shields.io/badge/platform-Windows-lightgrey)
 ![macOS](https://img.shields.io/badge/macOS-in%20progress-yellow)
