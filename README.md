@@ -180,6 +180,8 @@ Embedding-only models or base (non-instruct) models have no chat support and won
 
 Switch models anytime with `/model <model-name>` — no restart needed.
 
+> **B.Y.O.M (Bring Your Own Model) — in development.** We're working on support for models outside the Ollama catalog — Hugging Face GGUF models, custom fine-tunes, and locally quantized models. If you trained it, you should be able to run it with the bros.
+
 ---
 
 ## Usage
