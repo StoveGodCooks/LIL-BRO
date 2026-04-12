@@ -207,6 +207,163 @@ def get_download_url() -> str:
         return "https://ollama.com/download/linux"
 
 
+async def install_ollama(
+    on_status: callable | None = None,
+) -> tuple[bool, str]:
+    """Attempt to install Ollama via the system package manager.
+
+    Tries platform-specific install commands:
+      - Windows: winget install Ollama.Ollama
+      - macOS:   brew install ollama
+      - Linux:   curl -fsSL https://ollama.com/install.sh | sh
+
+    Returns (success, message).
+    The on_status callback receives status strings for UI updates.
+    """
+    system = platform.system()
+
+    def _status(msg: str) -> None:
+        if on_status:
+            on_status(msg)
+
+    if system == "Windows":
+        # Try winget first.
+        winget = shutil.which("winget")
+        if winget:
+            _status("Installing via winget... (this may take a minute)")
+            try:
+                proc = await asyncio.create_subprocess_exec(
+                    winget, "install", "--id", "Ollama.Ollama",
+                    "--accept-source-agreements", "--accept-package-agreements",
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                )
+                stdout, stderr = await asyncio.wait_for(
+                    proc.communicate(), timeout=300.0
+                )
+                output = stdout.decode("utf-8", errors="replace")
+                if proc.returncode == 0:
+                    _status("Ollama installed successfully via winget!")
+                    return True, "Installed via winget. Ollama should start automatically."
+                else:
+                    err = stderr.decode("utf-8", errors="replace")
+                    # winget returns non-zero if already installed.
+                    if "already installed" in output.lower() or "already installed" in err.lower():
+                        _status("Ollama is already installed!")
+                        return True, "Ollama is already installed."
+                    return False, f"winget install failed (exit {proc.returncode}): {err[:200]}"
+            except asyncio.TimeoutError:
+                return False, "winget install timed out (5 min). Try manually: winget install Ollama.Ollama"
+            except Exception as exc:
+                return False, f"winget error: {exc}"
+        else:
+            return False, (
+                "winget not found. Install Ollama manually:\n"
+                "  Download from https://ollama.com/download/windows"
+            )
+
+    elif system == "Darwin":
+        brew = shutil.which("brew")
+        if brew:
+            _status("Installing via Homebrew...")
+            try:
+                proc = await asyncio.create_subprocess_exec(
+                    brew, "install", "ollama",
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                )
+                stdout, stderr = await asyncio.wait_for(
+                    proc.communicate(), timeout=300.0
+                )
+                if proc.returncode == 0:
+                    _status("Ollama installed via Homebrew!")
+                    return True, "Installed via Homebrew. Run: ollama serve"
+                else:
+                    err = stderr.decode("utf-8", errors="replace")
+                    return False, f"brew install failed: {err[:200]}"
+            except asyncio.TimeoutError:
+                return False, "brew install timed out."
+            except Exception as exc:
+                return False, f"brew error: {exc}"
+        else:
+            return False, (
+                "Homebrew not found. Install Ollama manually:\n"
+                "  Download from https://ollama.com/download/mac"
+            )
+
+    else:
+        # Linux — use the official install script.
+        curl = shutil.which("curl")
+        if curl:
+            _status("Installing via official script...")
+            try:
+                proc = await asyncio.create_subprocess_shell(
+                    "curl -fsSL https://ollama.com/install.sh | sh",
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                )
+                stdout, stderr = await asyncio.wait_for(
+                    proc.communicate(), timeout=300.0
+                )
+                if proc.returncode == 0:
+                    _status("Ollama installed!")
+                    return True, "Installed via official script. Run: ollama serve"
+                else:
+                    err = stderr.decode("utf-8", errors="replace")
+                    return False, f"Install script failed: {err[:200]}"
+            except asyncio.TimeoutError:
+                return False, "Install timed out."
+            except Exception as exc:
+                return False, f"Install error: {exc}"
+        else:
+            return False, (
+                "curl not found. Install Ollama manually:\n"
+                "  https://ollama.com/download/linux"
+            )
+
+
+async def start_ollama_serve() -> tuple[bool, str]:
+    """Attempt to start the Ollama daemon in the background.
+
+    Returns (success, message).
+    """
+    ollama_path = find_ollama()
+    if not ollama_path:
+        return False, "Ollama binary not found."
+
+    try:
+        system = platform.system()
+        if system == "Windows":
+            # On Windows, start as a detached process.
+            proc = await asyncio.create_subprocess_exec(
+                ollama_path, "serve",
+                stdout=asyncio.subprocess.DEVNULL,
+                stderr=asyncio.subprocess.DEVNULL,
+                creationflags=0x00000008,  # DETACHED_PROCESS
+            )
+        else:
+            proc = await asyncio.create_subprocess_exec(
+                ollama_path, "serve",
+                stdout=asyncio.subprocess.DEVNULL,
+                stderr=asyncio.subprocess.DEVNULL,
+            )
+
+        # Give it a moment to start, then check the API.
+        await asyncio.sleep(3)
+        running, _, _ = await check_ollama_api()
+        if running:
+            return True, "Ollama daemon started."
+        else:
+            # Give it more time — cold start can be slow.
+            await asyncio.sleep(5)
+            running, _, _ = await check_ollama_api()
+            if running:
+                return True, "Ollama daemon started."
+            return False, "Ollama process started but API not responding yet. Wait a moment and retry."
+    except Exception as exc:
+        return False, f"Failed to start ollama serve: {exc}"
+
+
 async def pull_model(
     model_tag: str,
     base_url: str = "http://127.0.0.1:11434",

@@ -13,7 +13,6 @@ This replaces the simple StartupScreen for first-time users.
 from __future__ import annotations
 
 import asyncio
-import webbrowser
 from typing import TYPE_CHECKING
 
 from textual.app import ComposeResult
@@ -26,9 +25,10 @@ from src_local.agents.hardware import HardwareInfo, detect_hardware, score_model
 from src_local.agents.ollama_install import (
     OllamaStatus,
     detect_ollama,
-    get_download_url,
     get_install_instructions,
+    install_ollama,
     pull_model,
+    start_ollama_serve,
 )
 
 
@@ -116,13 +116,13 @@ class FirstRunScreen(Screen):
                 # Ollama install buttons.
                 with Horizontal(id="ollama-buttons", classes="button-row hidden"):
                     yield Button(
-                        "Download Ollama", id="btn-download-ollama", variant="success"
+                        "Install Ollama Now", id="btn-install-ollama", variant="success"
                     )
                     yield Button(
-                        "I already installed it — Retry", id="btn-retry-ollama"
+                        "Retry Detection", id="btn-retry-ollama"
                     )
                     yield Button(
-                        "Skip (offline mode)", id="btn-skip-ollama", variant="warning"
+                        "Skip (offline)", id="btn-skip-ollama", variant="warning"
                     )
 
                 # Model pick buttons.
@@ -173,14 +173,14 @@ class FirstRunScreen(Screen):
             )
             self._update(
                 "wizard-instructions",
-                "Start Ollama by running:\n\n"
-                "  ollama serve\n\n"
-                "in a separate terminal, then click Retry.",
+                "Click 'Start Ollama' to launch it, or run manually:\n\n"
+                "  ollama serve",
             )
             self._show("ollama-buttons")
-            # Change download button text.
             try:
-                self.query_one("#btn-download-ollama", Button).label = "Start Ollama"
+                btn = self.query_one("#btn-install-ollama", Button)
+                btn.label = "Start Ollama"
+                btn._start_only = True  # Flag so handler knows to just start, not install.
             except Exception:
                 pass
             return
@@ -292,17 +292,14 @@ class FirstRunScreen(Screen):
     def on_button_pressed(self, event: Button.Pressed) -> None:
         btn = event.button
 
-        if btn.id == "btn-download-ollama":
-            url = get_download_url()
-            try:
-                webbrowser.open(url)
-            except Exception:
-                pass
-            self._update(
-                "wizard-instructions",
-                f"Opening {url} in your browser...\n\n"
-                "After installing, click 'Retry' to continue.",
-            )
+        if btn.id == "btn-install-ollama":
+            btn.disabled = True
+            if getattr(btn, "_start_only", False):
+                self._update("wizard-instructions", "Starting Ollama daemon...")
+                self.run_worker(self._start_ollama_only())
+            else:
+                self._update("wizard-instructions", "Installing Ollama...")
+                self.run_worker(self._install_ollama())
 
         elif btn.id == "btn-retry-ollama":
             self._update("wizard-ollama-status", "Rechecking Ollama...")
@@ -330,6 +327,66 @@ class FirstRunScreen(Screen):
                 if not self._pulling:
                     self._pulling = True
                     self.run_worker(self._pull_model(btn.model_tag))
+
+    async def _start_ollama_only(self) -> None:
+        """Just start the Ollama daemon (already installed)."""
+        started, msg = await start_ollama_serve()
+        if started:
+            self._update("wizard-instructions", "Ollama is running!")
+            self._hide("ollama-buttons")
+            await asyncio.sleep(1)
+            await self._check_ollama()
+        else:
+            self._update("wizard-instructions", f"{msg}\n\nTry manually: ollama serve")
+            try:
+                self.query_one("#btn-install-ollama", Button).disabled = False
+            except Exception:
+                pass
+
+    async def _install_ollama(self) -> None:
+        """Install Ollama via system package manager, then start it."""
+        def on_status(msg: str) -> None:
+            try:
+                self._update("wizard-instructions", msg)
+            except Exception:
+                pass
+
+        success, message = await install_ollama(on_status=on_status)
+
+        if success:
+            self._update("wizard-ollama-status", "Ollama installed!")
+            self._update("wizard-instructions", message)
+
+            # Try to start the Ollama daemon.
+            self._update("wizard-instructions", message + "\n\nStarting Ollama daemon...")
+            started, start_msg = await start_ollama_serve()
+
+            if started:
+                self._update("wizard-instructions", "Ollama is running! Moving to model selection...")
+                await asyncio.sleep(1)
+                # Re-run detection to pick up the running daemon.
+                self._hide("ollama-buttons")
+                await self._check_ollama()
+            else:
+                self._update(
+                    "wizard-instructions",
+                    f"{message}\n\n{start_msg}\n\n"
+                    "Start it manually with: ollama serve\n"
+                    "Then click 'Retry Detection'.",
+                )
+                try:
+                    self.query_one("#btn-install-ollama", Button).disabled = True
+                    self.query_one("#btn-install-ollama", Button).label = "Installed"
+                except Exception:
+                    pass
+        else:
+            self._update("wizard-ollama-status", "Installation failed")
+            self._update("wizard-instructions", message)
+            # Re-enable the button so they can try again.
+            try:
+                self.query_one("#btn-install-ollama", Button).disabled = False
+            except Exception:
+                pass
 
     async def _pull_model(self, model_tag: str) -> None:
         """Pull a model with progress display."""
