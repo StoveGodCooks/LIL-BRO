@@ -344,7 +344,7 @@ class OllamaAgent:
         display_name: str = "Local Bro",
         system_prompt: str = DEFAULT_SYSTEM_PROMPT,
         temperature: float = 0.1,
-        context_window: int = 32768,
+        context_window: int = 8192,
         project_dir: Path | None = None,
         write_access: bool = True,
         tools_enabled: bool = True,
@@ -525,6 +525,17 @@ class OllamaAgent:
         if stripped.startswith("/") or len(stripped) < 15:
             return False
 
+        # Always skip meta / identity questions — not code-related
+        lower = stripped.lower()
+        meta_patterns = (
+            "big bro", "lil bro", "bro is doing", "what are you",
+            "who are you", "your name", "how are you", "doing today",
+            "shared log", "bunkbed", "workspace", "session",
+            "slower", "faster", "speed", "why do you", "respond",
+        )
+        if any(pat in lower for pat in meta_patterns):
+            return False
+
         casual_starts = (
             "hi", "hey", "hello", "thanks", "thank", "ok", "yes", "no",
             "sure", "cool", "nice", "good", "great", "lol", "haha",
@@ -533,37 +544,50 @@ class OllamaAgent:
         )
         first_word = stripped.split()[0].lower().rstrip("!.,?")
         if first_word in casual_starts:
-            lower = stripped.lower()
+            # Only unambiguously technical words — no common English doubles
             technical_signals = (
                 "code", "function", "class", "method", "implement",
-                "write", "create", "build", "fix", "bug", "error",
-                "explain", "teach", "learn", "example", "pattern",
-                "algorithm", "sort", "search", "tree", "graph", "list",
-                "debug", "trace", "stack", "exception", "import",
-                "decorator", "async", "await", "thread", "process",
-                "api", "endpoint", "request", "response", "database",
-                "sql", "query", "test", "assert", "mock", "plan",
-                "design", "architect", "refactor", "optimize",
-                "binary", "hex", "convert", "calculate", "math",
-                "loop", "recursive", "iterate", "parse", "serialize",
-                "file", "read", "write", "path", "directory",
-                "python", "javascript", "html", "css", "json",
-                "type", "variable", "string", "integer", "float",
-                "dict", "tuple", "set", "array", "struct",
+                "create", "build", "fix", "bug", "error",
+                "explain", "example", "pattern",
+                "algorithm", "sort", "search", "binary tree", "graph",
+                "debug", "traceback", "stack trace", "exception", "import",
+                "decorator", "async", "await", "thread", "subprocess",
+                "api", "endpoint", "database", "sql",
+                "pytest", "unittest", "assert", "mock",
+                "refactor", "optimize",
+                "recursion", "recursive", "iterate", "parse", "serialize",
+                "python", "javascript", "typescript", "html", "css", "json",
+                "variable", "integer", "float",
+                "dict", "tuple", "ndarray", "struct", "enum",
+                "dockerfile", "kubernetes", "git", "regex",
             )
             if not any(sig in lower for sig in technical_signals):
                 return False
 
-        lower = stripped.lower()
-        meta_patterns = (
-            "big bro", "lil bro", "bro is doing", "what are you",
-            "who are you", "your name", "how are you", "doing today",
-            "shared log", "bunkbed", "workspace", "session",
+        # Need at least 3 strong technical signals OR 1 unambiguous keyword
+        # to avoid firing Grandpa on casual questions that mention a tech word
+        unambiguous = (
+            "def ", "class ", "import ", "->", "self.", "__init__",
+            "return ", "async def", "await ", "try:", "except ",
+            "dockerfile", "pytest", "traceback", "recursion",
         )
-        if any(pat in lower for pat in meta_patterns):
-            return False
+        if any(sig in lower for sig in unambiguous):
+            return True
 
-        return True
+        # For everything else: require 2+ technical signals to confirm intent
+        technical_signals_all = (
+            "code", "function", "class", "method", "implement",
+            "build", "fix", "bug", "error", "exception",
+            "algorithm", "sort", "search", "debug", "import",
+            "decorator", "async", "await", "thread",
+            "api", "endpoint", "database", "sql",
+            "test", "assert", "mock", "refactor", "optimize",
+            "recursive", "iterate", "parse", "serialize",
+            "python", "javascript", "html", "css", "json",
+            "variable", "integer", "float", "dict", "tuple",
+        )
+        hits = sum(1 for sig in technical_signals_all if sig in lower)
+        return hits >= 2
 
     def _pre_retrieve(self, prompt: str, panel: "_BasePanel") -> None:
         """Phase 1 of hybrid retrieval: keyword-match pull.
@@ -870,7 +894,8 @@ class OllamaAgent:
                 # If the model never called Grandpa tools AND we have
                 # pre-retrieved candidates, inject them as fallback and
                 # do one more turn so the model sees the context.
-                if not _bible_tool_used and result.text:
+                pre_chunks = getattr(self, "_pre_retrieved_chunks", {})
+                if not _bible_tool_used and result.text and len(pre_chunks) >= 3:
                     fallback = self._inject_bible_context(prompt, panel)
                     if fallback != prompt:
                         # Inject Grandpa context and ask model to reconsider.
