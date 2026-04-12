@@ -156,13 +156,29 @@ The setup wizard will:
 
 ### Models
 
-| Model | VRAM | Speed | Quality |
-|-------|------|-------|---------|
-| `qwen2.5-coder:7b` | ~5-6 GB | Medium | Recommended |
-| `qwen2.5-coder:3b` | ~2-3 GB | Fast | Lower quality |
-| `qwen2.5-coder:14b` | ~9-10 GB | Slower | Best quality |
+LiL BRO works with **any Ollama chat model** — just set it with `/model <name>`. Quality depends on whether the model supports tool calling.
 
-Switch models anytime with `/model qwen2.5-coder:14b`.
+**Recommended (full tool-calling support):**
+
+| Model | VRAM | Speed | Notes |
+|-------|------|-------|-------|
+| `qwen2.5-coder:7b` | ~5-6 GB | Medium | ⭐ Recommended default |
+| `qwen2.5-coder:14b` | ~9-10 GB | Slower | Best quality |
+| `qwen2.5-coder:3b` | ~2-3 GB | Fast | Lower quality |
+| `deepseek-coder-v2` | ~9 GB | Medium | Strong coder |
+| `llama3.1:8b` | ~5-6 GB | Medium | Good general + tools |
+| `llama3.2:3b` | ~2-3 GB | Fast | Lightweight option |
+| `mistral-nemo` | ~7 GB | Medium | Strong instruction following |
+
+**Works with degraded tool calling (text fallback mode):**
+
+Older models like `codellama` and `llama2` will run but tool calls fall back to a text-based JSON parser. Grandpa and file tools still work — just less reliably.
+
+**Won't work:**
+
+Embedding-only models or base (non-instruct) models have no chat support and won't respond properly.
+
+Switch models anytime with `/model <model-name>` — no restart needed.
 
 ---
 
