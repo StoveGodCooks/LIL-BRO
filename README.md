@@ -1,19 +1,8 @@
 # LiL BRO
 
-```
-  ╺╺╺╺╺    ╺╺╺╺╺    ╺╺╺╺╺
-    ╏        ╏ ╏    ╏╺╺
-    ╏        ╏ ╏    ╏╺╺
-    ╏        ╏ ╏    ╏
-    ╏╺╺╺     ╏ ╏    ╏╺╺╺╺
-
-   ╏━━━╏   ╏━━━╏    ━━╏━━   ╏━━━━
-   ╏━━━╏   ╏━╏      ╏ ╏ ╏   ╏━━━━
-   ╏   ╏   ╏  ╏     ╏ ╏ ╏       ╏
-   ╏━━━╏   ╏   ╏    ━━╏━━   ╏━━━╏
-
-        local-model coding TUI
-```
+<p align="center">
+  <img src="assets/logo.png" alt="THE BROS — local-model coding TUI" width="480"/>
+</p>
 
 **A local AI coding assistant that runs entirely on your machine.** No API keys, no cloud, no billing. Just you, your GPU, and two bros who won't stop arguing.
 
