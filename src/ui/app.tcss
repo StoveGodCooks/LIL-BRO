@@ -1,0 +1,149 @@
+/* LIL BRO LOCAL — Textual CSS */
+
+Screen {
+    background: #1A1A1A;
+}
+
+/* ── Startup screen ────────────────────────────────── */
+
+#startup-box {
+    width: 60;
+    height: auto;
+    padding: 1 2;
+    border: round #A8D840;
+    background: #111111;
+}
+
+#logo {
+    text-align: center;
+    color: #A8D840;
+    text-style: bold;
+    margin-bottom: 1;
+}
+
+#status-label {
+    text-align: center;
+    color: #E8E8E8;
+    margin-bottom: 1;
+}
+
+#models-label {
+    color: #888888;
+    margin-bottom: 1;
+}
+
+#instructions {
+    color: #E8A838;
+    margin-bottom: 1;
+}
+
+#continue-btn {
+    width: 100%;
+    margin-top: 1;
+}
+
+/* ── Main dual-pane layout ─────────────────────────── */
+
+#main-container {
+    layout: horizontal;
+    height: 1fr;
+}
+
+/* ── Panels ────────────────────────────────────────── */
+
+BroAPanel {
+    width: 1fr;
+    border: solid #2A3518;
+    background: #111411;
+}
+
+BroAPanel.active-panel {
+    border: solid #A8D840;
+}
+
+BroBPanel {
+    width: 1fr;
+    border: solid #1A2E38;
+    background: #111418;
+}
+
+BroBPanel.active-panel {
+    border: solid #6EC8E8;
+}
+
+#panel-header {
+    height: 1;
+    text-align: center;
+    color: #888888;
+    text-style: bold;
+    background: #1A1A1A;
+}
+
+BroAPanel.active-panel #panel-header {
+    color: #A8D840;
+}
+
+BroBPanel.active-panel #panel-header {
+    color: #6EC8E8;
+}
+
+#log {
+    height: 1fr;
+    scrollbar-size: 1 1;
+}
+
+#stream-preview {
+    height: auto;
+    max-height: 3;
+    color: #888888;
+    padding: 0 1;
+}
+
+/* ── Status bar ────────────────────────────────────── */
+
+StatusBar {
+    height: 1;
+    dock: bottom;
+    background: #1A1A1A;
+    color: #888888;
+    padding: 0 1;
+}
+
+#status-model {
+    width: auto;
+    color: #A8D840;
+}
+
+#status-busy {
+    width: 1fr;
+    text-align: center;
+    color: #E8A838;
+}
+
+#status-info {
+    width: auto;
+    color: #666666;
+}
+
+/* ── Input bar ─────────────────────────────────────── */
+
+InputBar {
+    height: auto;
+    dock: bottom;
+    background: #1A1A1A;
+}
+
+#input-row {
+    height: 3;
+}
+
+#input-prefix {
+    width: auto;
+    padding: 1 1;
+    color: #A8D840;
+    text-style: bold;
+}
+
+#user-input {
+    width: 1fr;
+}

@@ -1,0 +1,23 @@
+# LIL BRO LOCAL — default config
+# Copy to ~/.lilbro-local/config.yaml to customize.
+
+ollama:
+  base_url: "http://127.0.0.1:11434"
+  model: "qwen2.5-coder:7b"        # change to any model in your Ollama cache
+  context_window: 32768
+  temperature: 0.1
+
+ui:
+  colors:
+    primary: "#A8D840"              # Bro A (left pane)
+    secondary: "#6EC8E8"            # Bro B (right pane)
+    user: "#E8E8E8"
+    primary_dim: "#2A3518"
+    secondary_dim: "#1A2E38"
+    bg: "#1A1A1A"
+    border: "#333333"
+
+journal:
+  auto_save: true
+  directory: "~/.lilbro-local/journals/"
+  keep: 100
