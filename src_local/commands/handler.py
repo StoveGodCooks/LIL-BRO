@@ -9,8 +9,8 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Literal
 
 if TYPE_CHECKING:
-    from src.agents.ollama_agent import OllamaAgent
-    from src.config import Config
+    from src_local.agents.ollama_agent import OllamaAgent
+    from src_local.config import Config
 
 
 Target = Literal["a", "b"]

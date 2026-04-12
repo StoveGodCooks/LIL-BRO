@@ -26,7 +26,7 @@ from typing import TYPE_CHECKING
 import httpx
 
 if TYPE_CHECKING:
-    from src.ui.panels import _BasePanel
+    from src_local.ui.panels import _BasePanel
 
 logger = logging.getLogger("lilbro-local.agent")
 

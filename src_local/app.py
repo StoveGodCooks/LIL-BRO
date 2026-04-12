@@ -21,19 +21,19 @@ from textual.binding import Binding
 from textual.containers import Container
 from textual.screen import Screen
 
-from src.agents.ollama_agent import (
+from src_local.agents.ollama_agent import (
     OllamaAgent,
     CODER_SYSTEM_PROMPT,
     HELPER_SYSTEM_PROMPT,
 )
-from src.commands.handler import CommandHandler
-from src.config import load_config
-from src.journal.recorder import JournalRecorder
-from src.router import Router
-from src.ui.input_bar import InputBar
-from src.ui.panels import BroAPanel, BroBPanel
-from src.ui.startup import StartupScreen
-from src.ui.status_bar import StatusBar
+from src_local.commands.handler import CommandHandler
+from src_local.config import load_config
+from src_local.journal.recorder import JournalRecorder
+from src_local.router import Router
+from src_local.ui.input_bar import InputBar
+from src_local.ui.panels import BroAPanel, BroBPanel
+from src_local.ui.startup import StartupScreen
+from src_local.ui.status_bar import StatusBar
 
 
 logger = logging.getLogger("lilbro-local")

@@ -14,7 +14,7 @@ dependencies = [
 ]
 
 [project.scripts]
-lilbro-local = "src.app:main"
+lilbro-local = "src_local.app:main"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src"]
+packages = ["src_local"]

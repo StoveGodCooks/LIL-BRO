@@ -48,7 +48,7 @@ class StartupScreen(Screen):
         models_label = self.query_one("#models-label", Static)
         instructions = self.query_one("#instructions", Static)
 
-        from src.agents.ollama_agent import check_ollama_health
+        from src_local.agents.ollama_agent import check_ollama_health
 
         health = await check_ollama_health(self._ollama_url)
 

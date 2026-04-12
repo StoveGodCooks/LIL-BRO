@@ -13,7 +13,7 @@ from textual.containers import Horizontal, Vertical
 from textual.widgets import Input, Static
 
 if TYPE_CHECKING:
-    from src.router import Router
+    from src_local.router import Router
 
 
 PLACEHOLDER_HINTS = [

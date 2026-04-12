@@ -17,12 +17,12 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Literal
 
 if TYPE_CHECKING:
-    from src.agents.ollama_agent import OllamaAgent
-    from src.commands.handler import CommandHandler
-    from src.journal.recorder import JournalRecorder
-    from src.ui.input_bar import InputBar
-    from src.ui.panels import BroAPanel, BroBPanel
-    from src.ui.status_bar import StatusBar
+    from src_local.agents.ollama_agent import OllamaAgent
+    from src_local.commands.handler import CommandHandler
+    from src_local.journal.recorder import JournalRecorder
+    from src_local.ui.input_bar import InputBar
+    from src_local.ui.panels import BroAPanel, BroBPanel
+    from src_local.ui.status_bar import StatusBar
 
 
 Target = Literal["a", "b"]

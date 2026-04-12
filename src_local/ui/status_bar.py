@@ -14,7 +14,7 @@ from textual.timer import Timer
 from textual.widgets import Static
 
 if TYPE_CHECKING:
-    from src.agents.ollama_agent import OllamaAgent
+    from src_local.agents.ollama_agent import OllamaAgent
 
 
 class StatusBar(Horizontal):
