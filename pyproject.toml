@@ -18,3 +18,10 @@ lilbro-local = "src_local.app:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src_local"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100

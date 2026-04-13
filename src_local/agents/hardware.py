@@ -42,20 +42,33 @@ async def detect_hardware() -> HardwareInfo:
     """Probe GPU and system RAM. Non-blocking."""
     info = HardwareInfo()
 
-    # System RAM.
+    # ── System RAM ────────────────────────────────────────────
+    _system = platform.system()
     try:
         import psutil
         info.ram_gb = psutil.virtual_memory().total / (1024 ** 3)
     except ImportError:
-        # Fallback: read from /proc/meminfo on Linux.
-        try:
-            with open("/proc/meminfo", "r") as f:
-                for line in f:
-                    if line.startswith("MemTotal:"):
-                        kb = int(line.split()[1])
-                        info.ram_gb = kb / (1024 ** 2)
-                        break
-        except Exception:
+        if _system == "Darwin":
+            # macOS: sysctl returns total bytes.
+            try:
+                result = subprocess.run(
+                    ["sysctl", "-n", "hw.memsize"],
+                    capture_output=True, text=True, timeout=5,
+                )
+                info.ram_gb = int(result.stdout.strip()) / (1024 ** 3)
+            except Exception:
+                info.ram_gb = 8.0
+        elif _system == "Linux":
+            try:
+                with open("/proc/meminfo", "r") as f:
+                    for line in f:
+                        if line.startswith("MemTotal:"):
+                            kb = int(line.split()[1])
+                            info.ram_gb = kb / (1024 ** 2)
+                            break
+            except Exception:
+                info.ram_gb = 8.0
+        else:
             # Windows without psutil — try wmic.
             try:
                 result = subprocess.run(
@@ -70,11 +83,31 @@ async def detect_hardware() -> HardwareInfo:
             except Exception:
                 info.ram_gb = 8.0  # Conservative default.
 
-    # CPU name.
+    # ── CPU name ───────────────────────────────────────────────
     try:
-        if platform.system() == "Windows":
+        if _system == "Darwin":
+            # macOS: works on both Intel and Apple Silicon.
+            try:
+                result = subprocess.run(
+                    ["sysctl", "-n", "machdep.cpu.brand_string"],
+                    capture_output=True, text=True, timeout=5,
+                )
+                cpu = result.stdout.strip()
+                if cpu:
+                    info.cpu_name = cpu
+                else:
+                    raise ValueError("empty")
+            except Exception:
+                # Apple Silicon doesn't always populate brand_string.
+                machine = platform.machine()  # "arm64" on M-series
+                if machine == "arm64":
+                    info.cpu_name = "Apple Silicon"
+                else:
+                    info.cpu_name = machine or "Unknown CPU"
+        elif _system == "Windows":
             info.cpu_name = platform.processor() or "Unknown CPU"
         else:
+            # Linux
             try:
                 with open("/proc/cpuinfo", "r") as f:
                     for line in f:
@@ -86,12 +119,10 @@ async def detect_hardware() -> HardwareInfo:
     except Exception:
         pass
 
-    # NVIDIA GPU via nvidia-smi.
-    # Use subprocess.run (sync) instead of asyncio — on Windows, Textual's
-    # event loop can't always spawn subprocesses reliably. nvidia-smi is
-    # fast (~100ms) so blocking here is fine.
+    # ── GPU detection ──────────────────────────────────────────
+    # Try NVIDIA first (all platforms), then Apple Metal (macOS).
     nvidia_smi = shutil.which("nvidia-smi")
-    if not nvidia_smi and platform.system() == "Windows":
+    if not nvidia_smi and _system == "Windows":
         # Fallback: known Windows paths.
         for candidate in [
             os.path.join(os.environ.get("SystemRoot", r"C:\WINDOWS"), "System32", "nvidia-smi.exe"),
@@ -121,6 +152,51 @@ async def detect_hardware() -> HardwareInfo:
                         logger.info("GPU detected: %s (%.1f GB VRAM)", info.gpu_name, info.vram_gb)
         except (subprocess.TimeoutExpired, OSError) as exc:
             logger.warning("nvidia-smi failed: %s", exc)
+
+    # macOS: Apple Silicon / AMD GPU via system_profiler.
+    if not info.has_gpu and _system == "Darwin":
+        try:
+            import json as _json
+            result = subprocess.run(
+                ["system_profiler", "SPDisplaysDataType", "-json"],
+                capture_output=True, text=True, timeout=10,
+            )
+            if result.returncode == 0:
+                data = _json.loads(result.stdout)
+                displays = data.get("SPDisplaysDataType", [])
+                for gpu in displays:
+                    name = gpu.get("sppci_model", "")
+                    # Apple Silicon uses unified memory — report system RAM.
+                    vram_str = gpu.get("spdisplays_vram", "")
+                    if "apple" in name.lower() or not vram_str:
+                        # Unified memory: GPU shares system RAM.
+                        info.gpu_name = name or "Apple GPU (Metal)"
+                        info.vram_gb = info.ram_gb  # Shared unified memory.
+                        info.has_gpu = True
+                        logger.info(
+                            "Apple GPU detected: %s (%.1f GB unified)",
+                            info.gpu_name, info.vram_gb,
+                        )
+                    else:
+                        # Discrete AMD GPU on older Intel Macs.
+                        info.gpu_name = name
+                        # vram_str is like "4 GB" or "8192 MB"
+                        try:
+                            parts = vram_str.split()
+                            val = float(parts[0])
+                            if len(parts) > 1 and "MB" in parts[1].upper():
+                                val /= 1024
+                            info.vram_gb = val
+                        except (ValueError, IndexError):
+                            info.vram_gb = 0.0
+                        info.has_gpu = True
+                        logger.info(
+                            "AMD GPU detected: %s (%.1f GB VRAM)",
+                            info.gpu_name, info.vram_gb,
+                        )
+                    break  # Use first GPU found.
+        except Exception as exc:
+            logger.warning("system_profiler GPU probe failed: %s", exc)
 
     return info
 
