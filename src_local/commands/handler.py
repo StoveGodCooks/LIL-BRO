@@ -813,7 +813,15 @@ class CommandHandler:
             if ollama_cfg is not None:
                 lines.append(f"Ollama URL: {getattr(ollama_cfg, 'base_url', '?')}")
                 lines.append(f"Model: {getattr(ollama_cfg, 'model', '?')}")
-                lines.append(f"Context window: Big Bro {getattr(ollama_cfg, 'context_window_big', '?')} / Lil Bro {getattr(ollama_cfg, 'context_window_lil', '?')}")
+                cfg_big = getattr(ollama_cfg, 'context_window_big', '?')
+                cfg_lil = getattr(ollama_cfg, 'context_window_lil', '?')
+                # Show actual resolved values from agents
+                actual_big = getattr(self.big_bro, 'context_window', '?') if self.big_bro else '?'
+                actual_lil = getattr(self.lil_bro, 'context_window', '?') if self.lil_bro else '?'
+                if cfg_big == "auto" or cfg_lil == "auto":
+                    lines.append(f"Context window: Big Bro {actual_big} / Lil Bro {actual_lil} (auto-detected from VRAM)")
+                else:
+                    lines.append(f"Context window: Big Bro {actual_big} / Lil Bro {actual_lil} (user-configured)")
                 lines.append(f"Temperature: {getattr(ollama_cfg, 'temperature', '?')}")
         for label, agent in [("Big Bro", self.big_bro), ("Lil Bro", self.lil_bro)]:
             if agent is not None:

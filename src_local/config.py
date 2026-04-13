@@ -21,8 +21,8 @@ DEFAULTS: dict[str, Any] = {
     "ollama": {
         "base_url": "http://127.0.0.1:11434",
         "model": "qwen2.5-coder:7b",
-        "context_window_big": 16384,
-        "context_window_lil": 8192,
+        "context_window_big": "auto",
+        "context_window_lil": "auto",
         "temperature": 0.1,
     },
     "ui": {
@@ -59,8 +59,8 @@ class Colors:
 class OllamaConfig:
     base_url: str = "http://127.0.0.1:11434"
     model: str = "qwen2.5-coder:7b"
-    context_window_big: int = 16384   # Big Bro — file I/O, code gen
-    context_window_lil: int = 8192    # Lil Bro — reasoning, explain
+    context_window_big: int | str = "auto"   # "auto" = detect from VRAM
+    context_window_lil: int | str = "auto"   # or explicit int (e.g. 16384)
     temperature: float = 0.1
 
 
@@ -72,6 +72,16 @@ class Config:
     journal_auto_save: bool
     journal_keep: int = 100
     lilbro_home: Path = field(default_factory=lambda: Path.home() / ".lilbro-local")
+
+
+def _parse_ctx(value: Any) -> int | str:
+    """Parse a context_window value: 'auto' stays as str, anything else → int."""
+    if isinstance(value, str) and value.strip().lower() == "auto":
+        return "auto"
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return "auto"
 
 
 def _deep_merge(base: dict, override: dict) -> dict:
@@ -121,8 +131,8 @@ def load_config() -> Config:
     ollama = OllamaConfig(
         base_url=str(ollama_data.get("base_url", doll["base_url"])),
         model=str(ollama_data.get("model", doll["model"])),
-        context_window_big=int(ollama_data.get("context_window_big", doll["context_window_big"])),
-        context_window_lil=int(ollama_data.get("context_window_lil", doll["context_window_lil"])),
+        context_window_big=_parse_ctx(ollama_data.get("context_window_big", doll["context_window_big"])),
+        context_window_lil=_parse_ctx(ollama_data.get("context_window_lil", doll["context_window_lil"])),
         temperature=float(ollama_data.get("temperature", doll["temperature"])),
     )
 

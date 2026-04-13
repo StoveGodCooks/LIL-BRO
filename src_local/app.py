@@ -42,6 +42,7 @@ from src_local.agents.ollama_agent import (
 from src_local.agents.ollama_install import stop_ollama_serve
 from src_local.commands.handler import CommandHandler
 from src_local.config import load_config
+from src_local.vram import detect_vram_mb, calculate_context_windows
 from src_local.journal.recorder import JournalRecorder
 from src_local.journal.session_log import SessionLogStreamer
 from src_local.router import Router
@@ -807,16 +808,30 @@ class LilBroLocalApp(App):
         state["active_model"] = model
         _save_state(state)
 
-        # -- Build agents ----------------------------------------------------
+        # -- Resolve context windows -----------------------------------------
         project_dir = Path.cwd()
+        cfg_big = self._config.ollama.context_window_big
+        cfg_lil = self._config.ollama.context_window_lil
 
+        if cfg_big == "auto" or cfg_lil == "auto":
+            vram = detect_vram_mb()
+            auto_big, auto_lil, reason = calculate_context_windows(vram)
+            log.info("VRAM auto-detect: %s", reason)
+        else:
+            auto_big, auto_lil = 8192, 4096  # unused fallback
+
+        ctx_big = auto_big if cfg_big == "auto" else int(cfg_big)
+        ctx_lil = auto_lil if cfg_lil == "auto" else int(cfg_lil)
+        log.info("Context windows: Big Bro %d, Lil Bro %d", ctx_big, ctx_lil)
+
+        # -- Build agents ----------------------------------------------------
         big_bro = OllamaAgent(
             base_url=base_url,
             model=model,
             display_name="Big Bro",
             system_prompt=CODER_SYSTEM_PROMPT,
             temperature=self._config.ollama.temperature,
-            context_window=self._config.ollama.context_window_big,
+            context_window=ctx_big,
             project_dir=project_dir,
             write_access=True,
         )
@@ -827,7 +842,7 @@ class LilBroLocalApp(App):
             display_name="Lil Bro",
             system_prompt=HELPER_SYSTEM_PROMPT,
             temperature=self._config.ollama.temperature,
-            context_window=self._config.ollama.context_window_lil,
+            context_window=ctx_lil,
             project_dir=project_dir,
             write_access=False,
         )
