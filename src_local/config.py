@@ -21,7 +21,8 @@ DEFAULTS: dict[str, Any] = {
     "ollama": {
         "base_url": "http://127.0.0.1:11434",
         "model": "qwen2.5-coder:7b",
-        "context_window": 32768,
+        "context_window_big": 16384,
+        "context_window_lil": 8192,
         "temperature": 0.1,
     },
     "ui": {
@@ -58,7 +59,8 @@ class Colors:
 class OllamaConfig:
     base_url: str = "http://127.0.0.1:11434"
     model: str = "qwen2.5-coder:7b"
-    context_window: int = 32768
+    context_window_big: int = 16384   # Big Bro — file I/O, code gen
+    context_window_lil: int = 8192    # Lil Bro — reasoning, explain
     temperature: float = 0.1
 
 
@@ -119,7 +121,8 @@ def load_config() -> Config:
     ollama = OllamaConfig(
         base_url=str(ollama_data.get("base_url", doll["base_url"])),
         model=str(ollama_data.get("model", doll["model"])),
-        context_window=int(ollama_data.get("context_window", doll["context_window"])),
+        context_window_big=int(ollama_data.get("context_window_big", doll["context_window_big"])),
+        context_window_lil=int(ollama_data.get("context_window_lil", doll["context_window_lil"])),
         temperature=float(ollama_data.get("temperature", doll["temperature"])),
     )
 

@@ -816,7 +816,7 @@ class LilBroLocalApp(App):
             display_name="Big Bro",
             system_prompt=CODER_SYSTEM_PROMPT,
             temperature=self._config.ollama.temperature,
-            context_window=self._config.ollama.context_window,
+            context_window=self._config.ollama.context_window_big,
             project_dir=project_dir,
             write_access=True,
         )
@@ -827,7 +827,7 @@ class LilBroLocalApp(App):
             display_name="Lil Bro",
             system_prompt=HELPER_SYSTEM_PROMPT,
             temperature=self._config.ollama.temperature,
-            context_window=self._config.ollama.context_window,
+            context_window=self._config.ollama.context_window_lil,
             project_dir=project_dir,
             write_access=False,
         )

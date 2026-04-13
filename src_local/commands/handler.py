@@ -813,7 +813,7 @@ class CommandHandler:
             if ollama_cfg is not None:
                 lines.append(f"Ollama URL: {getattr(ollama_cfg, 'base_url', '?')}")
                 lines.append(f"Model: {getattr(ollama_cfg, 'model', '?')}")
-                lines.append(f"Context window: {getattr(ollama_cfg, 'context_window', '?')}")
+                lines.append(f"Context window: Big Bro {getattr(ollama_cfg, 'context_window_big', '?')} / Lil Bro {getattr(ollama_cfg, 'context_window_lil', '?')}")
                 lines.append(f"Temperature: {getattr(ollama_cfg, 'temperature', '?')}")
         for label, agent in [("Big Bro", self.big_bro), ("Lil Bro", self.lil_bro)]:
             if agent is not None:
