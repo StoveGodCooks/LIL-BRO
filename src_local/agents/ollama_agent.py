@@ -840,7 +840,7 @@ class OllamaAgent:
 
     def _notify_sibling_struggling(self, panel: "_BasePanel", prompt: str) -> None:
         """Tell the sibling bro — live — that this bro is having trouble."""
-        sibling_name = self._sibling_name or "the other bro"
+        _sibling_name = self._sibling_name or "the other bro"  # noqa: F841
         my_name = self.display_name
         short_prompt = prompt[:60].replace("\n", " ").strip()
         if len(prompt) > 60:
@@ -848,7 +848,7 @@ class OllamaAgent:
 
         # Post in THIS bro's panel as a heads-up.
         panel.append_system(
-            f"(hitting some errors on this — gonna try one more approach...)"
+            "(hitting some errors on this — gonna try one more approach...)"
         )
 
         # Post in the SIBLING'S panel so they see it live.

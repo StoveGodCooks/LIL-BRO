@@ -818,13 +818,13 @@ class LilBroLocalApp(App):
             auto_big, auto_lil, reason = calculate_context_windows(
                 vram, model_name=model, base_url=base_url,
             )
-            log.info("VRAM auto-detect: %s", reason)
+            logger.info("VRAM auto-detect: %s", reason)
         else:
             auto_big, auto_lil = 8192, 4096  # unused fallback
 
         ctx_big = auto_big if cfg_big == "auto" else int(cfg_big)
         ctx_lil = auto_lil if cfg_lil == "auto" else int(cfg_lil)
-        log.info("Context windows: Big Bro %d, Lil Bro %d", ctx_big, ctx_lil)
+        logger.info("Context windows: Big Bro %d, Lil Bro %d", ctx_big, ctx_lil)
 
         # -- Build agents ----------------------------------------------------
         big_bro = OllamaAgent(

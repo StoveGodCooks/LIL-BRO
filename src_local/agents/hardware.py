@@ -6,7 +6,6 @@ rank which models from the catalog will run well on this machine.
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import os
 import platform

@@ -11,7 +11,6 @@ Option C flow:
 
 from __future__ import annotations
 
-import asyncio
 
 from textual.app import ComposeResult
 from textual.binding import Binding

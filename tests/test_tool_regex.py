@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
 
 from src_local.agents.ollama_agent import _extract_text_tool_calls
 
