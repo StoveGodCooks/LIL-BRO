@@ -6,7 +6,6 @@ user through setup if needed.
 
 from __future__ import annotations
 
-import asyncio
 
 from textual.app import ComposeResult
 from textual.containers import Center, Vertical

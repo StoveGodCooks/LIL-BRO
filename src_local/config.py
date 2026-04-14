@@ -126,13 +126,36 @@ def load_config() -> Config:
         border=colors_data.get("border", dcolors["border"]),
     )
 
+    # Read the raw user-provided ollama section (before merge with defaults)
+    # so we can tell which keys the user actually set vs inherited.
+    _raw_ollama = {}
+    if cfg_path is not None:
+        try:
+            _raw = yaml.safe_load(cfg_path.read_text(encoding="utf-8")) or {}
+            _raw_ollama = _raw.get("ollama", {})
+        except (yaml.YAMLError, OSError):
+            pass
+
     ollama_data = data.get("ollama", {})
     doll = DEFAULTS["ollama"]
+    # Backwards compat: if old "context_window" key is set but the new
+    # per-agent keys aren't, use the old value as fallback for both.
+    _ctx_fallback = _raw_ollama.get("context_window")
+    _user_set_big = "context_window_big" in _raw_ollama
+    _user_set_lil = "context_window_lil" in _raw_ollama
+    if _ctx_fallback and not _user_set_big:
+        _ctx_big = _ctx_fallback
+    else:
+        _ctx_big = ollama_data.get("context_window_big", doll["context_window_big"])
+    if _ctx_fallback and not _user_set_lil:
+        _ctx_lil = _ctx_fallback
+    else:
+        _ctx_lil = ollama_data.get("context_window_lil", doll["context_window_lil"])
     ollama = OllamaConfig(
         base_url=str(ollama_data.get("base_url", doll["base_url"])),
         model=str(ollama_data.get("model", doll["model"])),
-        context_window_big=_parse_ctx(ollama_data.get("context_window_big", doll["context_window_big"])),
-        context_window_lil=_parse_ctx(ollama_data.get("context_window_lil", doll["context_window_lil"])),
+        context_window_big=_parse_ctx(_ctx_big),
+        context_window_lil=_parse_ctx(_ctx_lil),
         temperature=float(ollama_data.get("temperature", doll["temperature"])),
     )
 

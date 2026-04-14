@@ -779,7 +779,7 @@ class CommandHandler:
     def _persist_model(model: str) -> None:
         """Save the active model to the state file so it persists across restarts."""
         try:
-            from src_local.app import STATE_FILE, _load_state, _save_state
+            from src_local.app import _load_state, _save_state
             state = _load_state()
             state["active_model"] = model
             _save_state(state)

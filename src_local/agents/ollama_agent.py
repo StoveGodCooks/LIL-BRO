@@ -276,10 +276,18 @@ HELPER_BUNKBED_PROMPT = _build_system_prompt(
 # ---------------------------------------------------------------------------
 
 # Pattern for what small models output instead of structured tool_calls:
-# {"name": "tool_name", "arguments": {...}}
+# Format A (common): {"name": "tool_name", "arguments": {...}}
+# Format B (Llama):  {"type": "function", "function": {"name": "...", "arguments": {...}}}
 # They may wrap it in a code fence or output it bare.
 _TEXT_TOOL_RE = re.compile(
     r'\{[^{}]*"name"\s*:\s*"(\w+)"[^{}]*"arguments"\s*:\s*(\{(?:[^{}]|\{[^{}]*\})*\})[^{}]*\}',
+    re.DOTALL,
+)
+# Llama 3.1+ wraps tool calls in {"type":"function","function":{...}}.
+_TEXT_TOOL_LLAMA_RE = re.compile(
+    r'\{\s*"type"\s*:\s*"function"\s*,\s*"function"\s*:\s*'
+    r'\{[^{}]*"name"\s*:\s*"(\w+)"[^{}]*"arguments"\s*:\s*(\{(?:[^{}]|\{[^{}]*\})*\})[^{}]*\}'
+    r'\s*\}',
     re.DOTALL,
 )
 
@@ -292,11 +300,16 @@ def _extract_text_tool_calls(
     Returns (tool_calls_list, cleaned_text).  tool_calls_list is in the
     same format as Ollama structured tool_calls so the existing tool loop
     can handle them unchanged.  cleaned_text has the JSON blocks stripped.
+
+    Supports two formats:
+      A) {"name": "tool", "arguments": {...}}          (Qwen, Mistral, etc.)
+      B) {"type":"function","function":{"name":...}}   (Llama 3.1+)
     """
     tool_calls: list[dict] = []
     cleaned = text
 
-    for match in _TEXT_TOOL_RE.finditer(text):
+    # Try Llama-style first (more specific, avoids double-matching).
+    for match in _TEXT_TOOL_LLAMA_RE.finditer(cleaned):
         tool_name = match.group(1)
         args_str = match.group(2)
         try:
@@ -304,10 +317,20 @@ def _extract_text_tool_calls(
         except json.JSONDecodeError:
             continue
         tool_calls.append({"function": {"name": tool_name, "arguments": arguments}})
-        # Strip this block from the display text.
         cleaned = cleaned.replace(match.group(0), "", 1)
 
-    # Also strip common code-fence wrappers the model may add around the JSON.
+    # Then try the standard format on whatever text remains.
+    for match in _TEXT_TOOL_RE.finditer(cleaned):
+        tool_name = match.group(1)
+        args_str = match.group(2)
+        try:
+            arguments = json.loads(args_str)
+        except json.JSONDecodeError:
+            continue
+        tool_calls.append({"function": {"name": tool_name, "arguments": arguments}})
+        cleaned = cleaned.replace(match.group(0), "", 1)
+
+    # Strip common code-fence wrappers the model may add around the JSON.
     cleaned = re.sub(r"```(?:json)?\s*\n?", "", cleaned)
     cleaned = cleaned.strip()
 
@@ -455,6 +478,27 @@ class OllamaAgent:
                 panel.append_system(f"({msg})")
         except asyncio.CancelledError:
             pass
+
+    async def _confirm_command(self, command: str, panel: "_BasePanel") -> bool:
+        """Show a modal asking the user to approve a shell command.
+
+        Returns True if approved, False if denied.
+        """
+        import asyncio as _aio
+        from src_local.ui.confirm_command import ConfirmCommandScreen
+
+        future: _aio.Future[bool] = _aio.get_running_loop().create_future()
+
+        def _on_result(approved: bool | None) -> None:
+            if not future.done():
+                future.set_result(bool(approved))
+
+        try:
+            panel.app.push_screen(ConfirmCommandScreen(command), _on_result)
+        except Exception:  # noqa: BLE001
+            # If the modal can't be shown (e.g., headless), deny by default.
+            return False
+        return await future
 
     def request(self, prompt: str, panel: "_BasePanel") -> None:
         """Fire-and-forget request. Serializes via asyncio.Lock."""
@@ -796,7 +840,7 @@ class OllamaAgent:
 
     def _notify_sibling_struggling(self, panel: "_BasePanel", prompt: str) -> None:
         """Tell the sibling bro — live — that this bro is having trouble."""
-        sibling_name = self._sibling_name or "the other bro"
+        _sibling_name = self._sibling_name or "the other bro"  # noqa: F841
         my_name = self.display_name
         short_prompt = prompt[:60].replace("\n", " ").strip()
         if len(prompt) > 60:
@@ -804,7 +848,7 @@ class OllamaAgent:
 
         # Post in THIS bro's panel as a heads-up.
         panel.append_system(
-            f"(hitting some errors on this — gonna try one more approach...)"
+            "(hitting some errors on this — gonna try one more approach...)"
         )
 
         # Post in the SIBLING'S panel so they see it live.
@@ -979,13 +1023,28 @@ class OllamaAgent:
                     except Exception:  # noqa: BLE001
                         pass
 
-                # Execute the tool.
-                tool_result = await execute_tool(
-                    tool_name,
-                    tool_args,
-                    project_dir=self.project_dir,
-                    write_access=self._write_access,
-                )
+                # run_command requires user confirmation before execution.
+                if tool_name == "run_command":
+                    approved = await self._confirm_command(
+                        tool_args.get("command", ""), panel
+                    )
+                    if not approved:
+                        tool_result = "Error: command denied by user."
+                        panel.append_system("(command denied)")
+                    else:
+                        tool_result = await execute_tool(
+                            tool_name, tool_args,
+                            project_dir=self.project_dir,
+                            write_access=self._write_access,
+                        )
+                else:
+                    # Execute the tool.
+                    tool_result = await execute_tool(
+                        tool_name,
+                        tool_args,
+                        project_dir=self.project_dir,
+                        write_access=self._write_access,
+                    )
 
                 # Hybrid merge: if this is a bible tool, merge with
                 # pre-retrieved candidates for confidence scoring.

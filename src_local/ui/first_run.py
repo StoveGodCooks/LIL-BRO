@@ -11,13 +11,12 @@ Option C flow:
 
 from __future__ import annotations
 
-import asyncio
 
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Center, Vertical, Horizontal
 from textual.screen import Screen
-from textual.widgets import Button, Static, ProgressBar
+from textual.widgets import Button, Input, Static, ProgressBar
 
 from src_local.agents.hardware import HardwareInfo, detect_hardware, score_model_fit
 from src_local.agents.ollama_install import (
@@ -32,9 +31,11 @@ from src_local.agents.ollama_install import (
 # ── Model catalog ─────────────────────────────────────────────
 
 QUICK_MODELS = [
+    # ── Qwen (default family) ──────────────────────────────
     {
         "tag": "qwen2.5-coder:7b",
         "display": "Qwen 2.5 Coder 7B",
+        "family": "Qwen",
         "size": "4.7 GB",
         "speed": "Medium",
         "tier": "Main",
@@ -43,11 +44,12 @@ QUICK_MODELS = [
         "cpu_ok": False,
         "license": "Apache 2.0",
         "commercial": True,
-        "notes": "Recommended. Commercial-clean.",
+        "notes": "⭐ Recommended default. Great tool calling.",
     },
     {
         "tag": "qwen2.5-coder:3b",
         "display": "Qwen 2.5 Coder 3B",
+        "family": "Qwen",
         "size": "2.3 GB",
         "speed": "Fast",
         "tier": "Lite",
@@ -56,11 +58,12 @@ QUICK_MODELS = [
         "cpu_ok": True,
         "license": "non-commercial",
         "commercial": False,
-        "notes": "Lower quality. Personal/learning use only.",
+        "notes": "Lower quality. Uses text-based tool fallback.",
     },
     {
         "tag": "qwen2.5-coder:14b",
         "display": "Qwen 2.5 Coder 14B",
+        "family": "Qwen",
         "size": "8.5 GB",
         "speed": "Slower",
         "tier": "Premium",
@@ -69,7 +72,95 @@ QUICK_MODELS = [
         "cpu_ok": False,
         "license": "Apache 2.0",
         "commercial": True,
-        "notes": "Best quality. Needs 10+ GB VRAM.",
+        "notes": "Best Qwen quality. Needs 10+ GB VRAM.",
+    },
+    # ── DeepSeek ───────────────────────────────────────────
+    {
+        "tag": "deepseek-coder-v2:16b",
+        "display": "DeepSeek Coder V2 16B",
+        "family": "DeepSeek",
+        "size": "~9 GB",
+        "speed": "Medium",
+        "tier": "Main",
+        "min_vram": 10,
+        "min_ram": 20,
+        "cpu_ok": False,
+        "license": "non-commercial",
+        "commercial": False,
+        "notes": "Strong code model. Research/personal use.",
+    },
+    # ── Codestral ──────────────────────────────────────────
+    {
+        "tag": "codestral:22b",
+        "display": "Codestral 22B",
+        "family": "Mistral",
+        "size": "~13 GB",
+        "speed": "Slower",
+        "tier": "Premium",
+        "min_vram": 14,
+        "min_ram": 32,
+        "cpu_ok": False,
+        "license": "non-commercial",
+        "commercial": False,
+        "notes": "Mistral's code model. Needs beefy GPU.",
+    },
+    # ── Llama ──────────────────────────────────────────────
+    {
+        "tag": "llama3.1:8b",
+        "display": "Llama 3.1 8B",
+        "family": "Llama",
+        "size": "4.7 GB",
+        "speed": "Medium",
+        "tier": "Main",
+        "min_vram": 6,
+        "min_ram": 16,
+        "cpu_ok": False,
+        "license": "Llama 3.1 Community",
+        "commercial": True,
+        "notes": "General purpose. Good tool calling.",
+    },
+    {
+        "tag": "llama3.1:70b",
+        "display": "Llama 3.1 70B",
+        "family": "Llama",
+        "size": "~40 GB",
+        "speed": "Slow",
+        "tier": "Premium",
+        "min_vram": 42,
+        "min_ram": 64,
+        "cpu_ok": False,
+        "license": "Llama 3.1 Community",
+        "commercial": True,
+        "notes": "Top-tier quality. Needs 48+ GB VRAM.",
+    },
+    # ── Phi ────────────────────────────────────────────────
+    {
+        "tag": "phi3:3.8b",
+        "display": "Phi-3 3.8B",
+        "family": "Phi",
+        "size": "2.3 GB",
+        "speed": "Fast",
+        "tier": "Lite",
+        "min_vram": 4,
+        "min_ram": 8,
+        "cpu_ok": True,
+        "license": "MIT",
+        "commercial": True,
+        "notes": "Microsoft's small model. Decent for its size.",
+    },
+    {
+        "tag": "phi3:14b",
+        "display": "Phi-3 14B",
+        "family": "Phi",
+        "size": "7.9 GB",
+        "speed": "Medium",
+        "tier": "Main",
+        "min_vram": 10,
+        "min_ram": 20,
+        "cpu_ok": False,
+        "license": "MIT",
+        "commercial": True,
+        "notes": "Solid mid-range. Commercial-friendly.",
     },
 ]
 
@@ -216,9 +307,17 @@ class FirstRunScreen(Screen):
         self._set_status("status-ollama", "err",
                          "✗ Ollama not installed")
         self._show("action-row")
+        import platform as _plat
+        _sys = _plat.system()
+        if _sys == "Darwin":
+            method = "via Homebrew"
+        elif _sys == "Windows":
+            method = "via winget"
+        else:
+            method = "via curl"
         self._set_hint(
             "Ollama is required to run local models.\n"
-            "Click 'Install Ollama' to install via winget."
+            f"Click 'Install Ollama' to install {method}."
         )
 
     async def _handle_models(self) -> None:
@@ -245,6 +344,19 @@ class FirstRunScreen(Screen):
             event.button.disabled = True
             event.button.label = "Installing..."
             self.run_worker(self._do_install())
+
+        elif bid == "btn-pull-custom":
+            if not self._pulling:
+                try:
+                    inp = self.query_one("#custom-model-input", Input)
+                    tag = inp.value.strip()
+                except Exception:
+                    tag = ""
+                if tag:
+                    self._pulling = True
+                    self.run_worker(self._pull_model(tag))
+                else:
+                    self._set_hint("Type a model tag first (e.g. mistral-nemo)")
 
         elif bid in _MODEL_BY_BTN:
             if not self._pulling:
@@ -306,7 +418,15 @@ class FirstRunScreen(Screen):
         installed = set(self._ollama.models or [])
         section = self.query_one("#model-section", Vertical)
 
+        last_family = ""
         for model in QUICK_MODELS:
+            # Family header.
+            family = model.get("family", "")
+            if family and family != last_family:
+                header = Static(f"── {family} ──", classes="family-header")
+                await section.mount(header)
+                last_family = family
+
             tag = model["tag"]
             score = score_model_fit(
                 min_vram_gb=model["min_vram"],
@@ -319,7 +439,6 @@ class FirstRunScreen(Screen):
             lic = f"✓ {model['license']}" if model["commercial"] else f"⚠ {model['license']}"
             is_installed = tag in installed
 
-            # Info text.
             info_text = (
                 f"{model['display']}"
                 + ("  ✅ INSTALLED" if is_installed else "")
@@ -335,7 +454,6 @@ class FirstRunScreen(Screen):
             bid = _btn_id(tag)
 
             if is_installed:
-                # Already pulled — no button needed, can just continue.
                 pass
             elif score == 0:
                 btn = Button(f"Pull {model['display']} (not recommended)",
@@ -345,6 +463,22 @@ class FirstRunScreen(Screen):
                 btn = Button(f"Pull {model['display']} ({model['size']})",
                              id=bid, variant="primary")
                 await card.mount(btn)
+
+        # ── Custom model input ─────────────────────────────────
+        custom_header = Static("── Custom (BYOM) ──", classes="family-header")
+        await section.mount(custom_header)
+        custom_card = Vertical(classes="model-card")
+        await section.mount(custom_card)
+        await custom_card.mount(
+            Static("Any Ollama model — type the tag and pull it.\n"
+                   "  e.g. mistral-nemo, gemma2:9b, starcoder2:7b")
+        )
+        await custom_card.mount(
+            Input(placeholder="model:tag", id="custom-model-input")
+        )
+        await custom_card.mount(
+            Button("Pull Custom Model", id="btn-pull-custom", variant="primary")
+        )
 
         self._show("model-section")
 

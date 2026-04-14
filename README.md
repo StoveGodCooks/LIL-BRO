@@ -17,13 +17,13 @@ They share a workspace, they know about each other, and they will absolutely tal
 ![Python](https://img.shields.io/badge/python-3.11+-blue)
 ![License](https://img.shields.io/badge/license-PolyForm%20NC-blue)
 ![Ollama](https://img.shields.io/badge/powered%20by-Ollama-orange)
-![Platform](https://img.shields.io/badge/platform-Windows-lightgrey)
-![macOS](https://img.shields.io/badge/macOS-in%20progress-yellow)
-![Linux](https://img.shields.io/badge/Linux-in%20progress-yellow)
+![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey)
+![macOS](https://img.shields.io/badge/macOS-supported-green)
+![Linux](https://img.shields.io/badge/Linux-supported-green)
 
 > ⚠️ **LiL BRO is in beta.** Expect rough edges, missing features, and the occasional bro meltdown. Things will break. We're building in public and moving fast — feedback and bug reports welcome.
 
-> **Platform note:** LiL BRO currently runs on **Windows**. macOS and Linux ports are actively in development — the core app (Python, Textual, Ollama) is fully cross-platform, but the installer and shell execution layer need platform-specific work before we can officially support them. Apple Silicon (M1/M2/M3) support is also planned and should be excellent once the port is done — Ollama runs natively on Metal.
+> **Platform note:** LiL BRO runs on **Windows, macOS, and Linux**. Apple Silicon (M1/M2/M3/M4) is fully supported — Ollama runs natively on Metal and the bros will detect your unified memory automatically.
 
 ---
 
@@ -137,7 +137,24 @@ Optional gamification layer:
 - GPU with 6GB+ VRAM for 7b model (or CPU-only with 3b)
 - [Ollama](https://ollama.com) installed
 
-### Install
+### Install Ollama
+
+**Windows:**
+```bash
+winget install Ollama.Ollama
+```
+
+**macOS:**
+```bash
+brew install ollama
+```
+
+**Linux:**
+```bash
+curl -fsSL https://ollama.ai/install.sh | sh
+```
+
+### Install LiL BRO
 
 ```bash
 # Clone the repo
@@ -183,7 +200,7 @@ Embedding-only models or base (non-instruct) models have no chat support and won
 
 Switch models anytime with `/model <model-name>` — no restart needed.
 
-> **B.Y.O.M (Bring Your Own Model) — in development.** We're working on support for models outside the Ollama catalog — Hugging Face GGUF models, custom fine-tunes, and locally quantized models. If you trained it, you should be able to run it with the bros.
+> **B.Y.O.M (Bring Your Own Model):** LiL BRO supports any model Ollama can run. The setup wizard has curated picks (Qwen, DeepSeek, Codestral, Llama, Phi) plus a Custom option for any model tag. Context windows are calculated dynamically from the model's architecture — no manual tuning needed. GGUF imports and custom fine-tunes work too: `ollama create mymodel -f Modelfile` then `/model mymodel` in the TUI.
 
 ---
 
@@ -222,7 +239,8 @@ Copy `config.yaml` to `~/.lilbro-local/config.yaml` to customize:
 ollama:
   base_url: "http://127.0.0.1:11434"
   model: "qwen2.5-coder:7b"
-  context_window: 32768
+  context_window_big: auto          # or integer e.g. 32768
+  context_window_lil: auto
   temperature: 0.1
 ```
 

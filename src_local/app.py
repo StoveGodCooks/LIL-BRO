@@ -815,14 +815,16 @@ class LilBroLocalApp(App):
 
         if cfg_big == "auto" or cfg_lil == "auto":
             vram = detect_vram_mb()
-            auto_big, auto_lil, reason = calculate_context_windows(vram)
-            log.info("VRAM auto-detect: %s", reason)
+            auto_big, auto_lil, reason = calculate_context_windows(
+                vram, model_name=model, base_url=base_url,
+            )
+            logger.info("VRAM auto-detect: %s", reason)
         else:
             auto_big, auto_lil = 8192, 4096  # unused fallback
 
         ctx_big = auto_big if cfg_big == "auto" else int(cfg_big)
         ctx_lil = auto_lil if cfg_lil == "auto" else int(cfg_lil)
-        log.info("Context windows: Big Bro %d, Lil Bro %d", ctx_big, ctx_lil)
+        logger.info("Context windows: Big Bro %d, Lil Bro %d", ctx_big, ctx_lil)
 
         # -- Build agents ----------------------------------------------------
         big_bro = OllamaAgent(
@@ -995,6 +997,13 @@ class LilBroLocalApp(App):
 
 
 def main() -> None:
+    # Redirect __pycache__ folders into one hidden dir so users don't
+    # see bytecode scattered across every package folder.
+    import sys as _sys
+    _cache_dir = Path.home() / ".lilbro-local" / ".pycache"
+    _cache_dir.mkdir(parents=True, exist_ok=True)
+    _sys.pycache_prefix = str(_cache_dir)
+
     parser = argparse.ArgumentParser(
         description="LIL BRO LOCAL -- dual-pane local model TUI"
     )

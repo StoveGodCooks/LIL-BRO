@@ -3,8 +3,9 @@
 
 ollama:
   base_url: "http://127.0.0.1:11434"
-  model: "qwen2.5-coder:7b"        # change to any model in your Ollama cache
-  context_window: 32768
+  model: "qwen2.5-coder:7b"        # any Ollama model — use /model to switch live
+  context_window_big: auto          # or an integer like 32768
+  context_window_lil: auto          # "auto" queries Ollama for the model's limit
   temperature: 0.1
 
 ui:
