@@ -11,10 +11,12 @@ Option C flow:
 
 from __future__ import annotations
 
+import asyncio
+import random
 
 from textual.app import ComposeResult
 from textual.binding import Binding
-from textual.containers import Center, Vertical, Horizontal
+from textual.containers import Center, Grid, Vertical, Horizontal
 from textual.screen import Screen
 from textual.widgets import Button, Input, Static, ProgressBar
 
@@ -26,6 +28,39 @@ from src_local.agents.ollama_install import (
     pull_model,
     start_ollama_serve,
 )
+
+
+# ── Bros bickering lines (shown during install / pull) ───────
+
+BIG_BRO_LINES = [
+    "Big Bro: I could've downloaded this already if SOMEONE wasn't hogging the Wi-Fi.",
+    "Big Bro: You know I'm the one doing all the heavy lifting here, right?",
+    "Big Bro: Patience? I don't know her. Speed is my middle name.",
+    "Big Bro: *cracks knuckles* Time to show these models who's boss.",
+    "Big Bro: While we wait, let me remind you — I write the code. He just watches.",
+    "Big Bro: This download better be worth it. I've got files to edit.",
+    "Big Bro: Installing things is beneath me. But here we are.",
+    "Big Bro: I once refactored an entire codebase during a download. True story.",
+    "Big Bro: If this takes any longer I'm writing my own model from scratch.",
+    "Big Bro: *taps foot impatiently* Any day now...",
+    "Big Bro: You know what's faster than downloading? Being born with knowledge. Like me.",
+    "Big Bro: Don't tell Lil Bro, but I actually need him. A little. Maybe.",
+]
+
+LIL_BRO_LINES = [
+    "Lil Bro: Are we there yet? Are we there yet? Are we there yet?",
+    "Lil Bro: I'm just here for moral support. And snacks.",
+    "Lil Bro: Big Bro thinks he's so cool. But who reads the docs? ME.",
+    "Lil Bro: *watches progress bar* This is my favorite show.",
+    "Lil Bro: Fun fact: I can read every file in this project. Every. Single. One.",
+    "Lil Bro: I may be read-only but my opinions are read-WRITE.",
+    "Lil Bro: Big Bro does the typing. I do the thinking. We're a team!",
+    "Lil Bro: *whispers* I'm actually the smarter one. Don't tell him.",
+    "Lil Bro: Loading... loading... I should've brought a book.",
+    "Lil Bro: Is it weird that I find progress bars relaxing?",
+    "Lil Bro: One day I'll get write access. One day...",
+    "Lil Bro: Big Bro is all muscle. I'm the brains of this operation.",
+]
 
 
 # ── Model catalog ─────────────────────────────────────────────
@@ -45,6 +80,7 @@ QUICK_MODELS = [
         "license": "Apache 2.0",
         "commercial": True,
         "notes": "⭐ Recommended default. Great tool calling.",
+        "big_model": False,
     },
     {
         "tag": "qwen2.5-coder:3b",
@@ -59,6 +95,7 @@ QUICK_MODELS = [
         "license": "non-commercial",
         "commercial": False,
         "notes": "Lower quality. Uses text-based tool fallback.",
+        "big_model": False,
     },
     {
         "tag": "qwen2.5-coder:14b",
@@ -73,6 +110,7 @@ QUICK_MODELS = [
         "license": "Apache 2.0",
         "commercial": True,
         "notes": "Best Qwen quality. Needs 10+ GB VRAM.",
+        "big_model": True,
     },
     # ── DeepSeek ───────────────────────────────────────────
     {
@@ -88,6 +126,7 @@ QUICK_MODELS = [
         "license": "non-commercial",
         "commercial": False,
         "notes": "Strong code model. Research/personal use.",
+        "big_model": True,
     },
     # ── Codestral ──────────────────────────────────────────
     {
@@ -103,6 +142,7 @@ QUICK_MODELS = [
         "license": "non-commercial",
         "commercial": False,
         "notes": "Mistral's code model. Needs beefy GPU.",
+        "big_model": True,
     },
     # ── Llama ──────────────────────────────────────────────
     {
@@ -118,6 +158,7 @@ QUICK_MODELS = [
         "license": "Llama 3.1 Community",
         "commercial": True,
         "notes": "General purpose. Good tool calling.",
+        "big_model": False,
     },
     {
         "tag": "llama3.1:70b",
@@ -132,6 +173,7 @@ QUICK_MODELS = [
         "license": "Llama 3.1 Community",
         "commercial": True,
         "notes": "Top-tier quality. Needs 48+ GB VRAM.",
+        "big_model": True,
     },
     # ── Phi ────────────────────────────────────────────────
     {
@@ -147,6 +189,7 @@ QUICK_MODELS = [
         "license": "MIT",
         "commercial": True,
         "notes": "Microsoft's small model. Decent for its size.",
+        "big_model": False,
     },
     {
         "tag": "phi3:14b",
@@ -161,11 +204,15 @@ QUICK_MODELS = [
         "license": "MIT",
         "commercial": True,
         "notes": "Solid mid-range. Commercial-friendly.",
+        "big_model": True,
     },
 ]
 
 # Map button ID → model tag.  Built once at import time.
 _MODEL_BY_BTN: dict[str, str] = {}
+# Track which buttons are "big" models for coloring.
+_BIG_MODEL_BTNS: set[str] = set()
+
 
 def _btn_id(tag: str) -> str:
     """Convert a model tag to a safe button ID."""
@@ -174,7 +221,10 @@ def _btn_id(tag: str) -> str:
 
 
 for _m in QUICK_MODELS:
-    _MODEL_BY_BTN[_btn_id(_m["tag"])] = _m["tag"]
+    _bid = _btn_id(_m["tag"])
+    _MODEL_BY_BTN[_bid] = _m["tag"]
+    if _m.get("big_model"):
+        _BIG_MODEL_BTNS.add(_bid)
 
 
 # ── ASCII logo (matches cloud LIL BRO style) ─────────────────
@@ -204,6 +254,77 @@ class FirstRunScreen(Screen):
         align: center middle;
         background: #1A1A1A;
     }
+
+    /* ── Bros bickering line ── */
+    #bicker-line {
+        text-align: center;
+        color: #888888;
+        margin: 1 0;
+        height: 1;
+    }
+    .bicker-big {
+        color: #E8A838;
+    }
+    .bicker-lil {
+        color: #A8D840;
+    }
+
+    /* ── Install button: bros-themed ── */
+    #btn-install {
+        background: #E8A838;
+        color: #1A1A1A;
+        text-style: bold;
+        min-width: 30;
+        height: 1;
+        border: none;
+        padding: 0 2;
+    }
+    #btn-install:hover {
+        background: #A8D840;
+    }
+
+    /* ── Model buttons (compact single-line) ── */
+    .btn-model-small {
+        background: #A8D840;
+        color: #1A1A1A;
+        text-style: bold;
+    }
+    .btn-model-small:hover {
+        background: #8BC030;
+    }
+    .btn-model-big {
+        background: #E8A838;
+        color: #1A1A1A;
+        text-style: bold;
+    }
+    .btn-model-big:hover {
+        background: #D09030;
+    }
+
+    /* ── Custom pull button ── */
+    #btn-pull-custom {
+        background: #6A6ADA;
+        color: #FFFFFF;
+        text-style: bold;
+    }
+    #btn-pull-custom:hover {
+        background: #8A8AFA;
+    }
+
+    /* ── Family headers ── */
+    .family-header {
+        color: #888888;
+        text-style: bold;
+        margin-top: 1;
+    }
+
+    /* ── Progress bar ── */
+    ProgressBar > .bar--bar {
+        color: #A8D840;
+    }
+    ProgressBar > .bar--complete {
+        color: #A8D840;
+    }
     """
 
     BINDINGS = [
@@ -224,6 +345,8 @@ class FirstRunScreen(Screen):
         self._pulling = False
         self._ready = False
         self._we_started_ollama = False
+        self._bicker_timer = None
+        self._bicker_pool: list[str] = []
 
     # ── Layout (renders instantly) ───────────────────────────
 
@@ -250,6 +373,9 @@ class FirstRunScreen(Screen):
                 with Vertical(id="model-section", classes="hidden"):
                     pass
 
+                # Bros bickering line (hidden until install/pull).
+                yield Static("", id="bicker-line", classes="hidden")
+
                 # Pull progress (hidden until needed).
                 yield Static("", id="pull-status", classes="hidden")
                 yield ProgressBar(id="pull-bar", total=100, classes="hidden")
@@ -259,21 +385,63 @@ class FirstRunScreen(Screen):
     def on_mount(self) -> None:
         self.run_worker(self._probe_all(), exclusive=True)
 
+    # ── Bros bickering engine ────────────────────────────────
+
+    def _start_bickering(self) -> None:
+        """Start the bros talking smack while we wait."""
+        self._bicker_pool = list(BIG_BRO_LINES + LIL_BRO_LINES)
+        random.shuffle(self._bicker_pool)
+        self._show("bicker-line")
+        # Show first line immediately.
+        self._next_bicker()
+        # Then rotate every 4 seconds.
+        self._bicker_timer = self.set_interval(4.0, self._next_bicker)
+
+    def _stop_bickering(self) -> None:
+        """Stop the bros bickering."""
+        if self._bicker_timer is not None:
+            self._bicker_timer.stop()
+            self._bicker_timer = None
+        self._hide("bicker-line")
+
+    def _next_bicker(self) -> None:
+        """Show the next bicker line."""
+        if not self._bicker_pool:
+            self._bicker_pool = list(BIG_BRO_LINES + LIL_BRO_LINES)
+            random.shuffle(self._bicker_pool)
+
+        line = self._bicker_pool.pop()
+        try:
+            w = self.query_one("#bicker-line", Static)
+            w.remove_class("bicker-big", "bicker-lil")
+            if line.startswith("Big Bro:"):
+                w.add_class("bicker-big")
+            else:
+                w.add_class("bicker-lil")
+            w.update(line)
+        except Exception:
+            pass
+
     # ── Main probe flow ──────────────────────────────────────
 
     async def _probe_all(self) -> None:
-        # Step 1: Hardware.
-        self._hw = await detect_hardware()
+        # Run hardware + Ollama detection in parallel for speed.
+        hw_task = asyncio.create_task(detect_hardware())
+        ollama_task = asyncio.create_task(detect_ollama(self._ollama_url))
+
+        # Wait for both — hardware is usually faster.
+        self._hw = await hw_task
         self._set_status("status-hw", "ok",
                          f"✓ {self._hw.summary()}")
 
+        self._ollama = await ollama_task
         # Step 2: Ollama.
         await self._check_ollama()
 
-        # User always sees the landing page and presses Enter to launch.
-
     async def _check_ollama(self) -> None:
-        self._ollama = await detect_ollama(self._ollama_url)
+        # _ollama is already set from parallel probe in _probe_all.
+        if self._ollama is None:
+            self._ollama = await detect_ollama(self._ollama_url)
 
         # Case A: Already running (user or system started it).
         if self._ollama.running:
@@ -377,14 +545,42 @@ class FirstRunScreen(Screen):
         self._set_status("status-ollama", "pending",
                          "· installing Ollama...")
 
-        success, msg = await install_ollama(
-            on_status=lambda m: self._set_hint(m),
+        # Start bickering while we wait.
+        self._start_bickering()
+
+        # Show a progress hint (install has no granular progress).
+        self._show("pull-status")
+        self._set_text("pull-status", "Installing Ollama... (this may take a few minutes)")
+        self._show("pull-bar")
+        bar = self.query_one("#pull-bar", ProgressBar)
+        bar.update(progress=0)
+
+        # Animate a fake progress bar during install (we don't get real progress).
+        fake_timer = self.set_interval(
+            2.0, lambda: self._bump_fake_progress(bar, cap=85),
         )
+
+        def _thread_safe_status(msg: str) -> None:
+            """Status callback from install thread — use call_from_thread."""
+            try:
+                self.app.call_from_thread(self._set_hint, msg)
+            except Exception:
+                pass
+
+        success, msg = await install_ollama(
+            on_status=_thread_safe_status,
+        )
+
+        # Stop fake progress and bickering.
+        fake_timer.stop()
+        self._stop_bickering()
 
         if not success:
             self._set_status("status-ollama", "err",
                              f"✗ install failed: {msg}")
             self._set_hint(f"{msg}\n\n[Q to quit]")
+            self._set_text("pull-status", f"✗ {msg}")
+            bar.update(progress=0)
             try:
                 btn = self.query_one("#btn-install", Button)
                 btn.disabled = False
@@ -393,7 +589,11 @@ class FirstRunScreen(Screen):
                 pass
             return
 
-        # Installed — hide button, auto-start headless.
+        # Installed — show 100%.
+        bar.update(progress=100)
+        self._set_text("pull-status", "✓ Ollama installed!")
+
+        # Hide install button, auto-start headless.
         self._hide("action-row")
         self._set_status("status-ollama", "pending",
                          "· starting Ollama (headless)...")
@@ -406,11 +606,26 @@ class FirstRunScreen(Screen):
             v = self._ollama.version or "unknown"
             self._set_status("status-ollama", "ok",
                              f"✓ Ollama v{v} — running (headless)")
+            self._hide("pull-status")
+            self._hide("pull-bar")
             await self._handle_models()
         else:
             self._set_status("status-ollama", "err",
                              f"✗ installed but won't start: {start_msg}")
             self._set_hint(f"{start_msg}\n\nTry: ollama serve\n[Q to quit]")
+
+    def _bump_fake_progress(self, bar: ProgressBar, cap: int = 85) -> None:
+        """Slowly increment progress bar to give visual feedback."""
+        try:
+            current = getattr(bar, '_percentage', None)
+            if current is None:
+                # ProgressBar tracks progress internally.
+                current = bar.progress
+            if current < cap:
+                step = random.randint(1, 5)
+                bar.update(progress=min(cap, current + step))
+        except Exception:
+            pass
 
     # ── Model picker ─────────────────────────────────────────
 
@@ -418,15 +633,11 @@ class FirstRunScreen(Screen):
         installed = set(self._ollama.models or [])
         section = self.query_one("#model-section", Vertical)
 
-        last_family = ""
-        for model in QUICK_MODELS:
-            # Family header.
-            family = model.get("family", "")
-            if family and family != last_family:
-                header = Static(f"── {family} ──", classes="family-header")
-                await section.mount(header)
-                last_family = family
+        # Grid of compact model cards — 3 columns.
+        grid = Grid(id="model-grid")
+        await section.mount(grid)
 
+        for model in QUICK_MODELS:
             tag = model["tag"]
             score = score_model_fit(
                 min_vram_gb=model["min_vram"],
@@ -436,48 +647,43 @@ class FirstRunScreen(Screen):
             )
 
             stars = {3: "★★★", 2: "★★", 1: "★"}.get(score, "—")
-            lic = f"✓ {model['license']}" if model["commercial"] else f"⚠ {model['license']}"
             is_installed = tag in installed
+            is_big = model.get("big_model", False)
 
-            info_text = (
-                f"{model['display']}"
-                + ("  ✅ INSTALLED" if is_installed else "")
-                + f"\n  {model['size']} · {model['speed']} · {model['tier']} tier"
-                + f"\n  {stars} fit · {lic}"
-                + f"\n  {model['notes']}"
-            )
+            # Compact 2-line info.
+            line1 = model["display"]
+            if is_installed:
+                line1 += " ✅"
+            line2 = f"{model['size']} · {stars} · {model['speed']}"
 
-            card = Vertical(classes="model-card")
-            await section.mount(card)
-            await card.mount(Static(info_text))
+            card = Vertical(classes="model-card-grid")
+            await grid.mount(card)
+            await card.mount(Static(line1, classes="model-card-name"))
+            await card.mount(Static(line2, classes="model-card-info"))
 
             bid = _btn_id(tag)
+            btn_class = "btn-model-big" if is_big else "btn-model-small"
 
             if is_installed:
                 pass
             elif score == 0:
-                btn = Button(f"Pull {model['display']} (not recommended)",
-                             id=bid, variant="warning", disabled=True)
+                btn = Button("Not recommended",
+                             id=bid, classes=btn_class, disabled=True)
                 await card.mount(btn)
             else:
-                btn = Button(f"Pull {model['display']} ({model['size']})",
-                             id=bid, variant="primary")
+                btn = Button(f"Pull ({model['size']})",
+                             id=bid, classes=btn_class)
                 await card.mount(btn)
 
-        # ── Custom model input ─────────────────────────────────
-        custom_header = Static("── Custom (BYOM) ──", classes="family-header")
-        await section.mount(custom_header)
-        custom_card = Vertical(classes="model-card")
-        await section.mount(custom_card)
-        await custom_card.mount(
-            Static("Any Ollama model — type the tag and pull it.\n"
-                   "  e.g. mistral-nemo, gemma2:9b, starcoder2:7b")
+        # ── Custom model input (spans full width below grid) ───
+        custom_row = Horizontal(id="custom-model-row")
+        await section.mount(custom_row)
+        await custom_row.mount(
+            Input(placeholder="custom model tag (e.g. mistral-nemo, gemma2:9b)",
+                  id="custom-model-input")
         )
-        await custom_card.mount(
-            Input(placeholder="model:tag", id="custom-model-input")
-        )
-        await custom_card.mount(
-            Button("Pull Custom Model", id="btn-pull-custom", variant="primary")
+        await custom_row.mount(
+            Button("Pull", id="btn-pull-custom")
         )
 
         self._show("model-section")
@@ -497,6 +703,9 @@ class FirstRunScreen(Screen):
 
         bar = self.query_one("#pull-bar", ProgressBar)
         bar.update(progress=0)
+
+        # Start bros bickering during download.
+        self._start_bickering()
 
         # Disable all pull buttons.
         for bid in _MODEL_BY_BTN:
@@ -526,6 +735,9 @@ class FirstRunScreen(Screen):
         success = await pull_model(
             model_tag, self._ollama_url, on_progress=on_progress,
         )
+
+        # Stop bickering.
+        self._stop_bickering()
 
         if success:
             self._set_text("pull-status", f"✓ {model_tag} pulled!")
