@@ -78,6 +78,9 @@ FILE_PATH_RE = re.compile(
     re.VERBOSE,
 )
 
+# Simple code-fence detection for basic markdown-like rendering.
+_CODE_FENCE_RE = re.compile(r"^```(\w*)$")
+
 
 def _highlight_file_paths(text: "Text") -> None:
     """In-place: recolor any file-path-looking tokens in purple."""
@@ -94,6 +97,9 @@ class _BasePanel(Container):
 
     AGENT_NAME: str = "Agent"
     AGENT_COLOR: str = "#FFFFFF"
+    # Softer body color for readable text (overridden by subclasses).
+    BODY_COLOR: str = "#D0D0D0"
+    CODE_BG: str = "#1A1A1A"
     BORDER_COLOR: str = "#FFFFFF"
     BORDER_DIM: str = "#333333"
     TARGET: str = "agent"  # "big" | "bro" -- set by subclasses
@@ -108,6 +114,9 @@ class _BasePanel(Container):
         self._spinner_timer: Timer | None = None
         # Parallel index of writes for Ctrl+F scrollback search.
         self._search_corpus: list[tuple[str, int]] = []
+        # Track whether we're inside a code fence during streaming.
+        self._in_code_fence: bool = False
+        self._code_lang: str = ""
 
     def attach_journal(self, journal: "JournalRecorder") -> None:
         self.journal = journal
@@ -187,6 +196,19 @@ class _BasePanel(Container):
         if searchable:
             self._search_corpus.append((searchable, strip_index))
 
+    def _ensure_scroll_end(self) -> None:
+        """Force-scroll the log to the bottom so new content is visible.
+
+        Textual's auto_scroll can lose track during rapid streaming.
+        This explicitly pins the viewport to the end.
+        """
+        try:
+            log = self.log_widget
+            if log.auto_scroll:
+                log.scroll_end(animate=False)
+        except Exception:  # noqa: BLE001
+            pass
+
     def append_user_message(self, text: str) -> None:
         # Flush any in-flight stream first so the user message doesn't land
         # in the middle of a partial assistant line.
@@ -198,12 +220,22 @@ class _BasePanel(Container):
         line.append(text, style="#E8E8E8")
         _highlight_file_paths(line)
         self._write_log(line, f"you {text}")
+        self._ensure_scroll_end()
 
     def start_agent_stream(self) -> None:
         """Called by OllamaAgent before streaming begins. Clears the
-        stream buffer and activates the thinking spinner."""
+        stream buffer, writes a timestamp header, and activates the
+        thinking spinner."""
         self._stream_buffer = ""
+        self._in_code_fence = False
+        self._code_lang = ""
         self._refresh_stream_preview()
+        # Write a timestamp header so the user knows when the response started.
+        stamp = datetime.now().strftime("%H:%M:%S")
+        header = Text()
+        header.append(f"[{stamp}] ", style="dim #666666")
+        header.append(f"{self.AGENT_NAME}", style=f"bold {self.AGENT_COLOR}")
+        self._write_log(header, f"{self.AGENT_NAME}")
         self.set_thinking(True)
 
     def append_agent_chunk(self, chunk: str) -> None:
@@ -218,6 +250,8 @@ class _BasePanel(Container):
             self._write_agent_line(line)
         # Refresh the preview with whatever partial line is still pending.
         self._refresh_stream_preview()
+        # Pin scroll to bottom so the user sees new content.
+        self._ensure_scroll_end()
 
     def append_agent_message(self, text: str) -> None:
         """Append a full (non-streamed) agent message -- used for mock agents
@@ -227,17 +261,20 @@ class _BasePanel(Container):
         stamp = datetime.now().strftime("%H:%M:%S")
         header = Text(f"[{stamp}] {self.AGENT_NAME}", style=f"bold {self.AGENT_COLOR}")
         self._write_log(header, f"{self.AGENT_NAME}")
-        body = Text.from_ansi(text)
-        body.style = self.AGENT_COLOR
-        _highlight_file_paths(body)
-        self._write_log(body, text)
+        # Render body with basic formatting.
+        for raw_line in text.split("\n"):
+            self._write_agent_line(raw_line)
+        self._ensure_scroll_end()
 
     def mark_assistant_complete(self, text: str = "") -> None:
         """End-of-turn marker. Flushes any pending stream into the log,
         clears the preview, stops the spinner, and records the full
         message for cross-talk + the journal."""
         self.set_thinking(False)
+        self._in_code_fence = False
+        self._code_lang = ""
         self._flush_stream_to_log()
+        self._ensure_scroll_end()
         if not text:
             return
         self._last_assistant_message = text
@@ -341,13 +378,93 @@ class _BasePanel(Container):
     # ---- streaming internals ----
 
     def _write_agent_line(self, line: str) -> None:
-        """Write one completed line into the RichLog in the agent's color."""
+        """Write one completed line into the RichLog with formatting.
+
+        Basic markdown-like rendering:
+        - Code fences (```) toggle monospace dim styling
+        - Lines starting with # are rendered as bold headings
+        - Lines starting with - or * are rendered as list items
+        - Bold markers (**text**) are detected
+        - Everything else gets the softer body color for readability
+        """
         if line == "":
             self.log_widget.write(Text(""))
             return
+
+        # Code fence toggle.
+        fence_match = _CODE_FENCE_RE.match(line.strip())
+        if fence_match:
+            if not self._in_code_fence:
+                self._in_code_fence = True
+                self._code_lang = fence_match.group(1)
+                lang_label = self._code_lang or "code"
+                rendered = Text(f"  ╭─ {lang_label} ", style=f"dim {self.AGENT_COLOR}")
+                self._write_log(rendered, line)
+            else:
+                self._in_code_fence = False
+                self._code_lang = ""
+                rendered = Text("  ╰─────", style=f"dim {self.AGENT_COLOR}")
+                self._write_log(rendered, line)
+            return
+
+        # Inside code fence: monospace-style dim rendering.
+        if self._in_code_fence:
+            rendered = Text("  │ ", style=f"dim {self.AGENT_COLOR}")
+            rendered.append(line, style="#C8C8C8")
+            _highlight_file_paths(rendered)
+            self._write_log(rendered, line)
+            return
+
+        stripped = line.strip()
+
+        # Heading lines (# Header).
+        if stripped.startswith("# ") or stripped.startswith("## ") or stripped.startswith("### "):
+            # Strip the # prefix for cleaner display.
+            heading_text = stripped.lstrip("#").strip()
+            rendered = Text(heading_text, style=f"bold {self.AGENT_COLOR}")
+            self._write_log(rendered, line)
+            return
+
+        # List items (- item or * item).
+        if stripped.startswith("- ") or stripped.startswith("* "):
+            rendered = Text("  • ", style=f"bold {self.AGENT_COLOR}")
+            rendered.append(stripped[2:], style=self.BODY_COLOR)
+            _highlight_file_paths(rendered)
+            self._write_log(rendered, line)
+            return
+
+        # Numbered list items (1. item).
+        if len(stripped) > 2 and stripped[0].isdigit() and ". " in stripped[:5]:
+            dot_pos = stripped.index(". ")
+            num = stripped[:dot_pos + 1]
+            rest = stripped[dot_pos + 2:]
+            rendered = Text(f"  {num} ", style=f"bold {self.AGENT_COLOR}")
+            rendered.append(rest, style=self.BODY_COLOR)
+            _highlight_file_paths(rendered)
+            self._write_log(rendered, line)
+            return
+
+        # Regular text in the softer body color for readability.
         rendered = Text.from_ansi(line)
-        rendered.style = self.AGENT_COLOR
+        rendered.style = self.BODY_COLOR
         _highlight_file_paths(rendered)
+
+        # Highlight **bold** segments in the agent color.
+        try:
+            rendered.highlight_regex(
+                r"\*\*(.+?)\*\*", style=f"bold {self.AGENT_COLOR}"
+            )
+        except Exception:  # noqa: BLE001
+            pass
+
+        # Highlight `inline code` segments.
+        try:
+            rendered.highlight_regex(
+                r"`([^`]+)`", style="bold #C8C8C8"
+            )
+        except Exception:  # noqa: BLE001
+            pass
+
         self._write_log(rendered, line)
 
     def _refresh_stream_preview(self) -> None:
@@ -361,7 +478,7 @@ class _BasePanel(Container):
         if len(tail) > PREVIEW_TAIL:
             tail = "... " + tail[-PREVIEW_TAIL:]
         rendered = Text.from_ansi(tail)
-        rendered.style = self.AGENT_COLOR
+        rendered.style = self.BODY_COLOR
         _highlight_file_paths(rendered)
         preview.update(rendered)
 
@@ -373,6 +490,7 @@ class _BasePanel(Container):
                 self._write_agent_line(part)
             self._stream_buffer = ""
         self._refresh_stream_preview()
+        self._ensure_scroll_end()
 
     @property
     def last_assistant_message(self) -> str:
@@ -405,6 +523,8 @@ class LilBroPanel(_BasePanel):
     """Left pane -- helper/explainer role (green)."""
     AGENT_NAME = "LIL BRO"
     AGENT_COLOR = "#A8D840"
+    BODY_COLOR = "#C8D8B0"  # Softer sage-green for body text
+    CODE_BG = "#101810"
     BORDER_COLOR = "#A8D840"
     BORDER_DIM = "#2A3518"
     TARGET = "bro"
@@ -414,6 +534,8 @@ class BigBroPanel(_BasePanel):
     """Right pane -- coder role (orange)."""
     AGENT_NAME = "BIG BRO"
     AGENT_COLOR = "#E8A838"
+    BODY_COLOR = "#D8CDB8"  # Softer warm-cream for body text
+    CODE_BG = "#181410"
     BORDER_COLOR = "#E8A838"
     BORDER_DIM = "#3A2A18"
     TARGET = "big"
