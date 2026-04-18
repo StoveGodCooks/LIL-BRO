@@ -25,6 +25,22 @@ DEFAULTS: dict[str, Any] = {
         "context_window_lil": "auto",
         "temperature": 0.1,
     },
+    # Per-bro backend assignment (Phase 1). When unset, both bros fall
+    # back to the ``ollama`` block above so existing configs keep
+    # working. The ``backend`` field is one of the providers registered
+    # in ``src_local.agents.connectors`` (``ollama`` / ``claude`` /
+    # ``codex``), plus ``flex`` (lil bro only) for adaptive routing.
+    "big_bro": {
+        "backend": "ollama",
+        "model": None,  # None → inherit from the matching ollama/claude/codex block
+        "context_window": "auto",
+    },
+    "lil_bro": {
+        "backend": "ollama",
+        "model": None,
+        "context_window": "auto",
+        "adaptive_fallback": "ollama",  # only consulted when backend == "flex"
+    },
     "ui": {
         "colors": {
             "primary": "#A8D840",
@@ -42,6 +58,12 @@ DEFAULTS: dict[str, Any] = {
         "keep": 100,
     },
 }
+
+
+#: Every backend value accepted in a ``big_bro.backend`` /
+#: ``lil_bro.backend`` field. Kept in sync with the CONNECTORS registry
+#: plus the special ``flex`` adaptive-routing marker for Lil Bro.
+VALID_BACKENDS: tuple[str, ...] = ("ollama", "claude", "codex", "flex")
 
 
 @dataclass(frozen=True)
@@ -65,9 +87,30 @@ class OllamaConfig:
 
 
 @dataclass(frozen=True)
+class BroConfig:
+    """Per-pane backend assignment.
+
+    ``backend`` names a provider in the connector registry (or ``flex``
+    for Lil Bro adaptive routing). ``model`` is forwarded to that
+    provider's CLI / daemon; ``None`` means "use whatever the OllamaConfig
+    / provider default is". ``context_window`` only matters for the
+    ``ollama`` backend today; cloud connectors ignore it.
+    """
+
+    backend: str = "ollama"
+    model: str | None = None
+    context_window: int | str = "auto"
+    #: Only consulted when ``backend == "flex"``. Names the provider to
+    #: fall back on when no cloud backend is reachable for a given turn.
+    adaptive_fallback: str = "ollama"
+
+
+@dataclass(frozen=True)
 class Config:
     colors: Colors
     ollama: OllamaConfig
+    big_bro: BroConfig
+    lil_bro: BroConfig
     journal_dir: Path
     journal_auto_save: bool
     journal_keep: int = 100
@@ -82,6 +125,76 @@ def _parse_ctx(value: Any) -> int | str:
         return int(value)
     except (TypeError, ValueError):
         return "auto"
+
+
+def _parse_bro_config(
+    raw: Any,
+    *,
+    pane: str,
+    ollama_default_model: str,
+    ollama_default_ctx: int | str,
+) -> BroConfig:
+    """Resolve a ``big_bro`` / ``lil_bro`` section into a :class:`BroConfig`.
+
+    Accepts two shapes so configs can be terse or explicit:
+
+    * **Dict** — the canonical long form::
+
+        big_bro:
+          backend: claude
+          model: sonnet-4
+          context_window: auto
+
+    * **String** — OpenCode-style ``provider/model`` shorthand::
+
+        big_bro: claude/sonnet-4
+        lil_bro: ollama/qwen2.5-coder:7b
+
+    Missing keys inherit from the ``ollama:`` block so Phase 0 configs
+    that only set ``ollama.model`` keep working unchanged.
+    """
+    # Import here to avoid pulling agents.* into import-time dependencies of
+    # callers that only want config values.
+    from src_local.agents.connectors import parse_model_string
+
+    backend = "ollama"
+    model: str | None = None
+    ctx: int | str = ollama_default_ctx
+    fallback = "ollama"
+
+    if isinstance(raw, str) and raw.strip():
+        try:
+            provider, parsed_model = parse_model_string(raw)
+            backend = provider
+            model = parsed_model
+        except ValueError:
+            # Unknown provider in the shorthand → keep defaults rather than
+            # crashing the whole config load.
+            pass
+    elif isinstance(raw, dict):
+        backend_raw = str(raw.get("backend", "ollama")).strip().lower()
+        if backend_raw in VALID_BACKENDS:
+            backend = backend_raw
+        model_raw = raw.get("model")
+        model = str(model_raw) if model_raw else None
+        if "context_window" in raw:
+            ctx = _parse_ctx(raw.get("context_window"))
+        if pane == "lil":
+            fb = str(raw.get("adaptive_fallback", "ollama")).strip().lower()
+            if fb in VALID_BACKENDS and fb != "flex":
+                fallback = fb
+
+    # For the ollama backend, an unset model should track whatever the
+    # shared ``ollama.model`` setting is so the two stay consistent.
+    if backend == "ollama" and model is None:
+        model = ollama_default_model
+
+    return BroConfig(
+        backend=backend,
+        model=model,
+        context_window=ctx,
+        adaptive_fallback=fallback,
+    )
 
 
 def _deep_merge(base: dict, override: dict) -> dict:
@@ -159,6 +272,22 @@ def load_config() -> Config:
         temperature=float(ollama_data.get("temperature", doll["temperature"])),
     )
 
+    # Per-bro backend assignment. When the pane-specific block is missing,
+    # default to Ollama with the shared model so Phase 0 configs keep
+    # working without any edits.
+    big_bro_cfg = _parse_bro_config(
+        data.get("big_bro"),
+        pane="big",
+        ollama_default_model=ollama.model,
+        ollama_default_ctx=ollama.context_window_big,
+    )
+    lil_bro_cfg = _parse_bro_config(
+        data.get("lil_bro"),
+        pane="lil",
+        ollama_default_model=ollama.model,
+        ollama_default_ctx=ollama.context_window_lil,
+    )
+
     journal_cfg = data.get("journal", {})
     journal_dir = Path(journal_cfg.get("directory", "~/.lilbro-local/journals/")).expanduser()
     auto_save = bool(journal_cfg.get("auto_save", True))
@@ -176,6 +305,8 @@ def load_config() -> Config:
     return Config(
         colors=colors,
         ollama=ollama,
+        big_bro=big_bro_cfg,
+        lil_bro=lil_bro_cfg,
         journal_dir=journal_dir,
         journal_auto_save=auto_save,
         journal_keep=journal_keep,

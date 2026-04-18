@@ -272,15 +272,37 @@ BigBroPanel .panel-log {
     scrollbar-color-hover: #E8A838;
 }
 
-.panel-stream {
+.log-line {
     width: 100%;
     height: auto;
-    min-height: 0;
-    max-height: 3;
+}
+
+.log-partial {
+    width: 100%;
+    height: auto;
+    text-style: italic;
+}
+
+.tool-call {
+    width: 100%;
+    height: auto;
+    margin: 0 0;
+    background: #1A1A1A;
+}
+
+.tool-call > CollapsibleTitle {
+    background: #141410;
+    color: #E8D840;
+    text-style: bold;
     padding: 0 1;
-    background: #121212;
-    overflow-x: hidden;
-    overflow-y: hidden;
+}
+
+.tool-detail {
+    width: 100%;
+    height: auto;
+    padding: 0 1;
+    background: #0E0E0E;
+    color: #C8C8C8;
 }
 
 .panel-pacman {

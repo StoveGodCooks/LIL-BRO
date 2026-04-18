@@ -28,6 +28,12 @@ from src_local.agents.ollama_install import (
     pull_model,
     start_ollama_serve,
 )
+from src_local.agents.cloud_install import (
+    PROVIDER_BINARIES,
+    ProviderStatus,
+    detect_all as detect_cloud_all,
+    install_cli as install_cloud_cli,
+)
 
 
 # ── Bros bickering lines (shown during install / pull) ───────
@@ -325,6 +331,88 @@ class FirstRunScreen(Screen):
     ProgressBar > .bar--complete {
         color: #A8D840;
     }
+
+    /* ── Mode picker ── */
+    #mode-prompt {
+        color: #E8E8E8;
+        text-style: bold;
+        text-align: center;
+        margin-top: 1;
+    }
+    #mode-row {
+        height: auto;
+        align: center middle;
+        margin: 1 0;
+    }
+    .btn-mode {
+        background: #6A6ADA;
+        color: #FFFFFF;
+        text-style: bold;
+        margin: 0 1;
+        min-width: 18;
+    }
+    .btn-mode:hover {
+        background: #8A8AFA;
+    }
+    #mode-blurb {
+        color: #888888;
+        text-align: center;
+        margin-bottom: 1;
+    }
+
+    /* ── Cloud install buttons ── */
+    .btn-cloud-install {
+        background: #E8A838;
+        color: #1A1A1A;
+        text-style: bold;
+        margin: 0 1;
+    }
+    .btn-cloud-install:hover {
+        background: #D09030;
+    }
+    #cloud-install-row {
+        height: auto;
+        align: center middle;
+    }
+
+    /* ── Bro assignment row ── */
+    #assign-prompt {
+        color: #E8E8E8;
+        text-style: bold;
+        text-align: center;
+        margin-top: 1;
+    }
+    #assign-big-row, #assign-lil-row {
+        height: auto;
+        align: center middle;
+        margin: 0 0;
+    }
+    .assign-label {
+        color: #888888;
+        width: 10;
+        content-align: right middle;
+        padding: 0 1;
+    }
+    .btn-assign {
+        background: #2A3518;
+        color: #A8D840;
+        margin: 0 1;
+        min-width: 10;
+    }
+    .btn-assign:hover {
+        background: #A8D840;
+        color: #1A1A1A;
+    }
+    .btn-assign-selected {
+        background: #A8D840;
+        color: #1A1A1A;
+        text-style: bold;
+    }
+    #assign-summary {
+        color: #888888;
+        text-align: center;
+        margin-top: 1;
+    }
     """
 
     BINDINGS = [
@@ -348,6 +436,19 @@ class FirstRunScreen(Screen):
         self._bicker_timer = None
         self._bicker_pool: list[str] = []
 
+        # Mode selection state. ``None`` until the user picks a mode from the
+        # opening screen. Once set, we route to the matching probe flow.
+        self._mode: str | None = None  # "local" | "cloud" | "mixed"
+        self._cloud: dict[str, ProviderStatus] = {}
+
+        # Bro→backend assignment built up by the cloud / mixed flow. Read by
+        # ``action_continue`` when exiting the wizard so the main app can
+        # instantiate the right connectors.
+        self._big_backend: str = "ollama"
+        self._big_model: str | None = None
+        self._lil_backend: str = "ollama"
+        self._lil_model: str | None = None
+
     # ── Layout (renders instantly) ───────────────────────────
 
     def compose(self) -> ComposeResult:
@@ -355,12 +456,52 @@ class FirstRunScreen(Screen):
             with Vertical(id="startup-box"):
                 yield Static(LOGO_THE, id="logo-the")
                 yield Static(LOGO_BROS, id="logo-bros")
-                yield Static("local-model coding TUI", id="subtitle")
+                yield Static("model-agnostic coding TUI", id="subtitle")
 
+                # ── Mode picker (shown first) ──────────────────────
+                with Vertical(id="mode-section"):
+                    yield Static(
+                        "How do you want to run?",
+                        id="mode-prompt",
+                        classes="status-line",
+                    )
+                    with Horizontal(id="mode-row"):
+                        yield Button(
+                            "Local (Ollama)",
+                            id="btn-mode-local",
+                            classes="btn-mode",
+                        )
+                        yield Button(
+                            "Cloud (Claude / Codex)",
+                            id="btn-mode-cloud",
+                            classes="btn-mode",
+                        )
+                        yield Button(
+                            "Mixed",
+                            id="btn-mode-mixed",
+                            classes="btn-mode",
+                        )
+                    yield Static(
+                        "Local keeps everything offline. Cloud uses your "
+                        "Claude Max / ChatGPT Plus subscription — no API keys. "
+                        "Mixed lets you put one bro on each.",
+                        id="mode-blurb",
+                    )
+
+                # Hardware line — shown for all modes.
                 yield Static("· detecting hardware...", id="status-hw",
-                             classes="status-line status-pending")
+                             classes="status-line status-pending hidden")
+
+                # Ollama line — hidden in pure cloud mode.
                 yield Static("· checking Ollama...", id="status-ollama",
-                             classes="status-line status-pending")
+                             classes="status-line status-pending hidden")
+
+                # Cloud CLI status lines (one per provider) — hidden in pure local mode.
+                yield Static("· checking Claude CLI...", id="status-claude",
+                             classes="status-line status-pending hidden")
+                yield Static("· checking Codex CLI...", id="status-codex",
+                             classes="status-line status-pending hidden")
+
                 yield Static("", id="status-models",
                              classes="status-line hidden")
 
@@ -368,6 +509,36 @@ class FirstRunScreen(Screen):
                 with Horizontal(id="action-row", classes="hidden"):
                     yield Button("Install Ollama", id="btn-install",
                                  variant="success")
+
+                # Cloud CLI install row (one button per missing provider).
+                with Horizontal(id="cloud-install-row", classes="hidden"):
+                    yield Button("Install Claude CLI", id="btn-install-claude",
+                                 classes="btn-cloud-install hidden")
+                    yield Button("Install Codex CLI", id="btn-install-codex",
+                                 classes="btn-cloud-install hidden")
+
+                # Bro-to-backend assignment block (shown after cloud detection).
+                with Vertical(id="assign-section", classes="hidden"):
+                    yield Static("Who gets which backend?",
+                                 id="assign-prompt", classes="status-line")
+                    with Horizontal(id="assign-big-row"):
+                        yield Static("Big Bro:", classes="assign-label")
+                        yield Button("Ollama", id="btn-big-ollama",
+                                     classes="btn-assign hidden")
+                        yield Button("Claude", id="btn-big-claude",
+                                     classes="btn-assign hidden")
+                        yield Button("Codex", id="btn-big-codex",
+                                     classes="btn-assign hidden")
+                    with Horizontal(id="assign-lil-row"):
+                        yield Static("Lil Bro:", classes="assign-label")
+                        yield Button("Ollama", id="btn-lil-ollama",
+                                     classes="btn-assign hidden")
+                        yield Button("Claude", id="btn-lil-claude",
+                                     classes="btn-assign hidden")
+                        yield Button("Codex", id="btn-lil-codex",
+                                     classes="btn-assign hidden")
+                    yield Static("", id="assign-summary",
+                                 classes="status-line")
 
                 # Model cards (hidden until needed).
                 with Vertical(id="model-section", classes="hidden"):
@@ -383,7 +554,9 @@ class FirstRunScreen(Screen):
                 yield Static("", id="hint")
 
     def on_mount(self) -> None:
-        self.run_worker(self._probe_all(), exclusive=True)
+        # No auto-probe until the user picks a mode — that way a cloud-only
+        # user never has to watch an Ollama probe they don't care about.
+        self._set_hint("[pick a mode above · Q to quit]")
 
     # ── Bros bickering engine ────────────────────────────────
 
@@ -421,6 +594,211 @@ class FirstRunScreen(Screen):
             w.update(line)
         except Exception:
             pass
+
+    # ── Mode selection + cloud/mixed flows ───────────────────
+
+    def _pick_mode(self, mode: str) -> None:
+        """User chose local / cloud / mixed. Route to the right probe."""
+        if self._mode is not None:
+            return  # already chosen; buttons should be gone
+        self._mode = mode
+
+        # Hide the picker — we won't come back to it.
+        self._hide("mode-section")
+        self._show("status-hw")
+
+        # Seed sensible defaults based on mode. Assignment screens can
+        # override these before the user hits ENTER.
+        if mode == "local":
+            self._big_backend = "ollama"
+            self._lil_backend = "ollama"
+            self._show("status-ollama")
+            self.run_worker(self._probe_all(), exclusive=True)
+        elif mode == "cloud":
+            # No Ollama probe at all in pure cloud mode.
+            self._show("status-claude")
+            self._show("status-codex")
+            self.run_worker(self._probe_cloud(), exclusive=True)
+        else:  # mixed
+            self._show("status-ollama")
+            self._show("status-claude")
+            self._show("status-codex")
+            self.run_worker(self._probe_mixed(), exclusive=True)
+
+    async def _probe_cloud(self) -> None:
+        """Cloud-only probe: hardware + both cloud CLIs. No Ollama."""
+        hw_task = asyncio.create_task(detect_hardware())
+        cloud_task = asyncio.create_task(detect_cloud_all())
+
+        self._hw = await hw_task
+        self._set_status("status-hw", "ok", f"✓ {self._hw.summary()}")
+
+        self._cloud = await cloud_task
+        self._render_cloud_status()
+        self._show_cloud_install_buttons()
+        self._open_assignment(include_ollama=False)
+
+    async def _probe_mixed(self) -> None:
+        """Mixed probe: everything in parallel — user picks per pane."""
+        hw_task = asyncio.create_task(detect_hardware())
+        ollama_task = asyncio.create_task(detect_ollama(self._ollama_url))
+        cloud_task = asyncio.create_task(detect_cloud_all())
+
+        self._hw = await hw_task
+        self._set_status("status-hw", "ok", f"✓ {self._hw.summary()}")
+
+        self._ollama = await ollama_task
+        if self._ollama.running:
+            v = self._ollama.version or "unknown"
+            self._set_status("status-ollama", "ok",
+                             f"✓ Ollama v{v} — running")
+        elif self._ollama.installed:
+            self._set_status("status-ollama", "pending",
+                             "· Ollama installed (not started)")
+        else:
+            self._set_status("status-ollama", "err",
+                             "✗ Ollama not installed (cloud still works)")
+
+        self._cloud = await cloud_task
+        self._render_cloud_status()
+        self._show_cloud_install_buttons()
+        self._open_assignment(include_ollama=True)
+
+    def _render_cloud_status(self) -> None:
+        """Update the per-provider status lines from ``self._cloud``."""
+        for provider in ("claude", "codex"):
+            wid = f"status-{provider}"
+            status = self._cloud.get(provider)
+            if status is None:
+                continue
+            if status.ready:
+                v = status.version or ""
+                self._set_status(wid, "ok",
+                                 f"✓ {provider} CLI{(' v' + v) if v else ''}")
+            elif status.installed:
+                self._set_status(wid, "pending",
+                                 f"· {provider} CLI found (version probe failed)")
+            else:
+                self._set_status(wid, "err",
+                                 f"✗ {provider} CLI not installed")
+
+    def _show_cloud_install_buttons(self) -> None:
+        """Reveal install buttons for any cloud CLI that's missing."""
+        any_missing = False
+        for provider in ("claude", "codex"):
+            status = self._cloud.get(provider)
+            if status is not None and not status.installed:
+                self._show(f"btn-install-{provider}")
+                any_missing = True
+        if any_missing:
+            self._show("cloud-install-row")
+
+    async def _install_cloud(self, provider: str) -> None:
+        """Guided ``npm install -g`` for a cloud CLI."""
+        self._show("pull-status")
+        self._set_text("pull-status",
+                       f"Installing {provider} CLI via npm...")
+        self._start_bickering()
+
+        def _status_cb(msg: str) -> None:
+            try:
+                self.app.call_from_thread(self._set_text, "pull-status", msg)
+            except Exception:
+                pass
+
+        ok, msg = await install_cloud_cli(provider, on_status=_status_cb)
+        self._stop_bickering()
+
+        if ok:
+            # Re-probe to pick up version + path.
+            self._cloud = await detect_cloud_all()
+            self._render_cloud_status()
+            self._hide(f"btn-install-{provider}")
+            self._set_text("pull-status",
+                           f"✓ {provider} CLI installed. Run "
+                           f"`{PROVIDER_BINARIES[provider]} login` before using it.")
+            # Re-open assignment so newly installed provider becomes pickable.
+            self._open_assignment(include_ollama=(self._mode == "mixed"))
+        else:
+            self._set_text("pull-status", f"✗ {msg}")
+            try:
+                btn = self.query_one(f"#btn-install-{provider}", Button)
+                btn.disabled = False
+                btn.label = f"Retry Install {provider.title()}"
+            except Exception:
+                pass
+
+    # ── Bro → backend assignment ─────────────────────────────
+
+    def _open_assignment(self, *, include_ollama: bool) -> None:
+        """Show the assign-section with only the viable backend buttons."""
+        self._show("assign-section")
+
+        # Which backends are usable right now?
+        available: list[str] = []
+        if include_ollama and self._ollama and (self._ollama.installed or self._ollama.running):
+            available.append("ollama")
+        for provider in ("claude", "codex"):
+            status = self._cloud.get(provider)
+            if status is not None and status.installed:
+                available.append(provider)
+
+        # Toggle visibility of each assign button based on availability.
+        for pane in ("big", "lil"):
+            for backend in ("ollama", "claude", "codex"):
+                try:
+                    btn = self.query_one(f"#btn-{pane}-{backend}", Button)
+                    if backend in available:
+                        btn.remove_class("hidden")
+                    else:
+                        btn.add_class("hidden")
+                except Exception:
+                    pass
+
+        # Seed default selection based on what's available.
+        if not available:
+            self._set_text("assign-summary",
+                           "Nothing is installed yet. Install at least one "
+                           "backend above.")
+            return
+
+        # Default: first available backend for both panes.
+        default = available[0]
+        self._big_backend = default
+        self._lil_backend = default
+        self._refresh_assign_highlight()
+        self._refresh_assign_summary()
+        self._ready = True
+        self._set_hint("[Tap a backend for each bro · ENTER to continue · Q to quit]")
+
+    def _assign_backend(self, pane: str, backend: str) -> None:
+        """Handle a bro-assignment button press."""
+        if pane == "big":
+            self._big_backend = backend
+        else:
+            self._lil_backend = backend
+        self._refresh_assign_highlight()
+        self._refresh_assign_summary()
+
+    def _refresh_assign_highlight(self) -> None:
+        """Add/remove the ``btn-assign-selected`` class on the chosen buttons."""
+        for pane, chosen in (("big", self._big_backend),
+                             ("lil", self._lil_backend)):
+            for backend in ("ollama", "claude", "codex"):
+                try:
+                    btn = self.query_one(f"#btn-{pane}-{backend}", Button)
+                    if backend == chosen:
+                        btn.add_class("btn-assign-selected")
+                    else:
+                        btn.remove_class("btn-assign-selected")
+                except Exception:
+                    pass
+
+    def _refresh_assign_summary(self) -> None:
+        self._set_text(
+            "assign-summary",
+            f"Big Bro → {self._big_backend}    Lil Bro → {self._lil_backend}",
+        )
 
     # ── Main probe flow ──────────────────────────────────────
 
@@ -496,6 +874,12 @@ class FirstRunScreen(Screen):
             if len(self._ollama.models) > 5:
                 names += f" (+{len(self._ollama.models) - 5} more)"
             self._set_status("status-models", "ok", f"✓ models: {names}")
+            # Seed the active model for both bros — local flow uses the
+            # first-available Ollama model by default. The user can
+            # change it from settings later.
+            first = self._ollama.models[0]
+            self._big_model = first
+            self._lil_model = first
             self._ready = True
             self._set_hint("[press ENTER to continue · Q to quit]")
         else:
@@ -508,10 +892,38 @@ class FirstRunScreen(Screen):
     def on_button_pressed(self, event: Button.Pressed) -> None:
         bid = event.button.id
 
-        if bid == "btn-install":
+        # ── Mode picker ──
+        if bid == "btn-mode-local":
+            self._pick_mode("local")
+
+        elif bid == "btn-mode-cloud":
+            self._pick_mode("cloud")
+
+        elif bid == "btn-mode-mixed":
+            self._pick_mode("mixed")
+
+        # ── Ollama install ──
+        elif bid == "btn-install":
             event.button.disabled = True
             event.button.label = "Installing..."
             self.run_worker(self._do_install())
+
+        # ── Cloud CLI install ──
+        elif bid == "btn-install-claude":
+            event.button.disabled = True
+            event.button.label = "Installing Claude..."
+            self.run_worker(self._install_cloud("claude"))
+
+        elif bid == "btn-install-codex":
+            event.button.disabled = True
+            event.button.label = "Installing Codex..."
+            self.run_worker(self._install_cloud("codex"))
+
+        # ── Bro assignment ──
+        elif bid.startswith("btn-big-") or bid.startswith("btn-lil-"):
+            parts = bid.split("-")  # btn, big|lil, backend
+            pane, backend = parts[1], parts[2]
+            self._assign_backend(pane, backend)
 
         elif bid == "btn-pull-custom":
             if not self._pulling:
@@ -533,8 +945,20 @@ class FirstRunScreen(Screen):
                 self.run_worker(self._pull_model(tag))
 
     def action_continue(self) -> None:
-        if self._ready:
-            self.app.open_dual_pane()  # type: ignore[attr-defined]
+        if not self._ready:
+            return
+        # Push the wizard's resolved backend assignment onto the app so
+        # ``open_dual_pane`` can wire up the right connectors. The app
+        # falls back to Ollama defaults if these attributes are absent.
+        app = self.app
+        try:
+            app._big_backend = self._big_backend  # type: ignore[attr-defined]
+            app._big_model = self._big_model  # type: ignore[attr-defined]
+            app._lil_backend = self._lil_backend  # type: ignore[attr-defined]
+            app._lil_model = self._lil_model  # type: ignore[attr-defined]
+        except Exception:
+            pass
+        self.app.open_dual_pane()  # type: ignore[attr-defined]
 
     def action_quit_app(self) -> None:
         self.app.exit()
@@ -743,11 +1167,14 @@ class FirstRunScreen(Screen):
             self._set_text("pull-status", f"✓ {model_tag} pulled!")
             bar.update(progress=100)
 
-            # Store selected model on app.
+            # Store selected model on app + seed per-bro defaults for the
+            # local flow (user can override on the assignment screen).
             try:
                 self.app._selected_model = model_tag  # type: ignore[attr-defined]
             except Exception:
                 pass
+            self._big_model = model_tag
+            self._lil_model = model_tag
 
             self._set_status("status-models", "ok", f"✓ model: {model_tag}")
             self._ready = True
