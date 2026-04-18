@@ -14,11 +14,15 @@ project directory. Paths that escape the sandbox are rejected.
 
 from __future__ import annotations
 
+import ast
 import asyncio
 import logging
+import math
+import operator
 import os
 import re
 from pathlib import Path
+from typing import Any
 
 logger = logging.getLogger("lilbro-local.tools")
 
@@ -537,36 +541,84 @@ def _exec_reasoning_lookup(args: dict, _project_dir: Path) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Calculator tool (sandboxed math evaluation)
+# Calculator tool (AST-based safe math evaluation)
 # ---------------------------------------------------------------------------
 
-# Safe builtins for calculate — math only, no IO or imports.
-_CALC_ALLOWED = {
-    "abs": abs, "round": round, "min": min, "max": max,
-    "sum": sum, "len": len, "int": int, "float": float,
-    "str": str, "bool": bool, "bin": bin, "oct": oct, "hex": hex,
-    "pow": pow, "divmod": divmod, "range": range,
-    "sorted": sorted, "reversed": reversed, "list": list,
-    "tuple": tuple, "set": set, "enumerate": enumerate,
-    "zip": zip, "map": map, "filter": filter,
-    "True": True, "False": False, "None": None,
+# Supported binary operators.
+_BIN_OPS: dict[type, Any] = {
+    ast.Add: operator.add,
+    ast.Sub: operator.sub,
+    ast.Mult: operator.mul,
+    ast.Div: operator.truediv,
+    ast.FloorDiv: operator.floordiv,
+    ast.Mod: operator.mod,
+    ast.Pow: operator.pow,
 }
+# Supported unary operators.
+_UN_OPS: dict[type, Any] = {
+    ast.UAdd: operator.pos,
+    ast.USub: operator.neg,
+}
+# Safe function whitelist.
+_SAFE_FUNCS: dict[str, Any] = {
+    "abs": abs, "round": round, "min": min, "max": max,
+    "int": int, "float": float, "pow": pow,
+    "sqrt": math.sqrt, "log": math.log, "log2": math.log2,
+    "log10": math.log10, "ceil": math.ceil, "floor": math.floor,
+    "sin": math.sin, "cos": math.cos, "tan": math.tan,
+    "pi": math.pi, "e": math.e,
+}
+
+# Maximum expression length to prevent abuse.
+_MAX_EXPR_LEN = 500
+
+
+def _safe_eval_node(node: ast.AST) -> Any:
+    """Recursively evaluate an AST node using only safe operations."""
+    if isinstance(node, ast.Expression):
+        return _safe_eval_node(node.body)
+    if isinstance(node, ast.Constant):
+        if isinstance(node.value, (int, float, complex)):
+            return node.value
+        raise ValueError(f"unsupported constant type: {type(node.value).__name__}")
+    if isinstance(node, ast.BinOp):
+        op = _BIN_OPS.get(type(node.op))
+        if op is None:
+            raise ValueError(f"unsupported operator: {type(node.op).__name__}")
+        return op(_safe_eval_node(node.left), _safe_eval_node(node.right))
+    if isinstance(node, ast.UnaryOp):
+        op = _UN_OPS.get(type(node.op))
+        if op is None:
+            raise ValueError(f"unsupported unary operator: {type(node.op).__name__}")
+        return op(_safe_eval_node(node.operand))
+    if isinstance(node, ast.Call):
+        if not isinstance(node.func, ast.Name):
+            raise ValueError("only simple function calls allowed (e.g. sqrt(4))")
+        fn = _SAFE_FUNCS.get(node.func.id)
+        if fn is None:
+            raise ValueError(f"unknown function: {node.func.id}")
+        args = [_safe_eval_node(a) for a in node.args]
+        return fn(*args)
+    if isinstance(node, ast.Name):
+        val = _SAFE_FUNCS.get(node.id)
+        if val is None:
+            raise ValueError(f"unknown name: {node.id}")
+        return val
+    raise ValueError(f"unsupported expression element: {type(node).__name__}")
 
 
 def _exec_calculate(args: dict, _project_dir: Path) -> str:
     expr = args.get("expression", "")
     if not expr:
         return "Error: 'expression' argument is required."
-    # Block dangerous patterns.
-    blocked = ["import", "__", "exec", "eval", "open", "os.", "sys.",
-               "subprocess", "shutil", "pathlib", "globals", "locals"]
-    for b in blocked:
-        if b in expr:
-            return f"Error: '{b}' is not allowed in calculate expressions."
+    if len(expr) > _MAX_EXPR_LEN:
+        return f"Error: expression too long ({len(expr)} chars, max {_MAX_EXPR_LEN})."
     try:
-        import math
-        safe_globals = {"__builtins__": _CALC_ALLOWED, "math": math}
-        result = eval(expr, safe_globals)  # noqa: S307
+        tree = ast.parse(expr, mode="eval")
+    except SyntaxError as exc:
+        return f"Error: invalid expression: {exc}"
+    try:
+        result = _safe_eval_node(tree)
         return f"{expr} = {result}"
     except Exception as exc:  # noqa: BLE001
         return f"Error evaluating '{expr}': {exc}"

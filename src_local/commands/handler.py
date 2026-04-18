@@ -465,6 +465,9 @@ class CommandHandler:
         if cmd == "/reset":
             return self._cmd_reset()
 
+        if cmd == "/resume":
+            return self._cmd_resume(arg)
+
         if cmd == "/review":
             return self._cmd_review(arg)
 
@@ -660,12 +663,60 @@ class CommandHandler:
         )
 
     def _cmd_reset(self) -> CommandResult:
-        if self.lil_bro is None:
-            return CommandResult(bypass_agent=True, message="Lil Bro agent not available.")
-        self.lil_bro.clear_history()
+        """Reset both agents to a fresh session and clear any project session files."""
+        msgs = []
+        for agent, name in ((self.big_bro, "Big Bro"), (self.lil_bro, "Lil Bro")):
+            if agent is None:
+                continue
+            agent.clear_history()
+            if hasattr(agent, "reset_thread"):
+                agent.reset_thread()
+            msgs.append(name)
+        if not msgs:
+            return CommandResult(bypass_agent=True, message="No agents available.")
         return CommandResult(
             bypass_agent=True,
-            message="Lil Bro history reset -- next message starts a fresh conversation.",
+            message=f"{' and '.join(msgs)} reset — next session starts fresh (project sessions cleared).",
+        )
+
+    def _cmd_resume(self, arg: str) -> CommandResult:
+        """Set a Claude session ID to resume.
+
+        Usage:
+          /resume <session_id>          -- applies to Big Bro (coder)
+          /resume big <session_id>      -- applies to Big Bro
+          /resume lil <session_id>      -- applies to Lil Bro
+        """
+        parts = arg.strip().split(None, 1)
+        if not parts:
+            return CommandResult(
+                bypass_agent=True,
+                message=(
+                    "Usage: /resume <session_id>  or  /resume big|lil <session_id>\n"
+                    "Copy the [xxxxxxxx] tag from the '· connected' banner."
+                ),
+            )
+        if parts[0].lower() in ("big", "lil"):
+            which, session_id = parts[0].lower(), (parts[1].strip() if len(parts) > 1 else "")
+        else:
+            which, session_id = "big", parts[0]
+
+        if not session_id:
+            return CommandResult(bypass_agent=True, message="No session ID provided.")
+
+        agent = self.big_bro if which == "big" else self.lil_bro
+        name = "Big Bro" if which == "big" else "Lil Bro"
+        if agent is None:
+            return CommandResult(bypass_agent=True, message=f"{name} agent not available.")
+        if not hasattr(agent, "set_resume_session"):
+            return CommandResult(
+                bypass_agent=True,
+                message=f"{name} is on Ollama — session IDs only apply to Claude / Codex backends.",
+            )
+        agent.set_resume_session(session_id)
+        return CommandResult(
+            bypass_agent=True,
+            message=f"{name} will resume session [{session_id[:8]}] on next /restart {which}.",
         )
 
     def _cmd_review(self, arg: str) -> CommandResult:
@@ -779,7 +830,7 @@ class CommandHandler:
     def _persist_model(model: str) -> None:
         """Save the active model to the state file so it persists across restarts."""
         try:
-            from src_local.app import STATE_FILE, _load_state, _save_state
+            from src_local.app import _load_state, _save_state
             state = _load_state()
             state["active_model"] = model
             _save_state(state)

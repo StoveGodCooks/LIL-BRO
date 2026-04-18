@@ -17,10 +17,9 @@ import os
 import platform
 import shutil
 import subprocess
-import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable
 
 if TYPE_CHECKING:
     from src_local.agents.hardware import HardwareInfo
@@ -85,7 +84,7 @@ def find_ollama() -> str | None:
     return None
 
 
-def check_ollama_version(ollama_path: str) -> str | None:
+def _check_ollama_version_sync(ollama_path: str) -> str | None:
     """Run `ollama --version` and return the version string (sync)."""
     try:
         flags = _CREATE_NO_WINDOW if platform.system() == "Windows" else 0
@@ -104,6 +103,12 @@ def check_ollama_version(ollama_path: str) -> str | None:
     return None
 
 
+async def check_ollama_version(ollama_path: str) -> str | None:
+    """Async wrapper — runs version check in a thread so we don't block."""
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(None, _check_ollama_version_sync, ollama_path)
+
+
 async def check_ollama_api(
     base_url: str = "http://127.0.0.1:11434",
 ) -> tuple[bool, str | None, list[str]]:
@@ -113,7 +118,7 @@ async def check_ollama_api(
     models: list[str] = []
 
     try:
-        async with httpx.AsyncClient(timeout=httpx.Timeout(5.0)) as client:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(2.0)) as client:
             try:
                 resp = await client.get(f"{base_url}/api/version")
                 if resp.status_code == 200:
@@ -150,12 +155,13 @@ async def detect_ollama(
     """Full Ollama detection: binary + API + models."""
     status = OllamaStatus()
 
-    # 1. Find the binary.
+    # 1. Find the binary (fast, just file checks).
     path = find_ollama()
     if path:
         status.installed = True
         status.path = path
-        version = check_ollama_version(path)
+        # Run version check in thread to avoid blocking the event loop.
+        version = await check_ollama_version(path)
         if version:
             status.version = version
 
@@ -185,12 +191,7 @@ def get_install_instructions() -> str:
 
 
 def _gpu_env(hw: "HardwareInfo | None" = None) -> dict[str, str]:
-    """Build environment with GPU settings for Ollama.
-
-    If we detected an NVIDIA GPU, set CUDA_VISIBLE_DEVICES=0 and
-    OLLAMA_GPU_LAYERS=-1 (offload all layers) so Ollama uses the
-    GPU without the user needing to configure anything.
-    """
+    """Build environment with GPU settings for Ollama."""
     env = dict(os.environ)
     if hw is not None and hw.has_gpu:
         env.setdefault("CUDA_VISIBLE_DEVICES", "0")
@@ -201,7 +202,7 @@ def _gpu_env(hw: "HardwareInfo | None" = None) -> dict[str, str]:
 
 
 def install_ollama_sync(
-    on_status: callable | None = None,
+    on_status: Callable[[str], None] | None = None,
 ) -> tuple[bool, str]:
     """Install Ollama via system package manager (sync, no visible window).
 
@@ -286,10 +287,10 @@ def install_ollama_sync(
 
 
 async def install_ollama(
-    on_status: callable | None = None,
+    on_status: Callable[[str], None] | None = None,
 ) -> tuple[bool, str]:
     """Async wrapper — runs install_ollama_sync in a thread."""
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     return await loop.run_in_executor(None, install_ollama_sync, on_status)
 
 
@@ -314,8 +315,6 @@ def start_ollama_serve_sync(
 
     try:
         if system == "Windows":
-            # CREATE_NO_WINDOW + DETACHED_PROCESS = fully hidden, no tray.
-            # We also set OLLAMA_NOPRUNE=1 to prevent cleanup popups.
             env["OLLAMA_NOPRUNE"] = "1"
             proc = subprocess.Popen(
                 [ollama_path, "serve"],
@@ -347,7 +346,7 @@ async def start_ollama_serve(
 
     Returns (success, message).
     """
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     ok, msg = await loop.run_in_executor(None, start_ollama_serve_sync, hw)
     if not ok:
         return False, msg
@@ -388,7 +387,7 @@ def is_managed_ollama_running() -> bool:
 async def pull_model(
     model_tag: str,
     base_url: str = "http://127.0.0.1:11434",
-    on_progress: callable | None = None,
+    on_progress: Callable[[str, int, int], None] | None = None,
 ) -> bool:
     """Pull a model via Ollama's API. Returns True on success.
 

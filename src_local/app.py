@@ -39,6 +39,7 @@ from src_local.agents.ollama_agent import (
     CODER_SYSTEM_PROMPT,
     HELPER_SYSTEM_PROMPT,
 )
+from src_local.agents.connectors import build_agent
 from src_local.agents.ollama_install import stop_ollama_serve
 from src_local.commands.handler import CommandHandler
 from src_local.config import load_config
@@ -65,6 +66,20 @@ from src_local.ui.status_bar import StatusBar
 
 
 logger = logging.getLogger("lilbro-local")
+
+
+def _backend_name(agent) -> str:
+    """Infer a user-facing backend label from an agent instance.
+
+    Used for the startup banner so cloud users don't see "connecting to
+    Ollama..." when they picked Claude / Codex.
+    """
+    cls = type(agent).__name__.lower()
+    if cls.startswith("claude"):
+        return "claude"
+    if cls.startswith("codex"):
+        return "codex"
+    return "ollama"
 
 # State file -- remembers the model the user picked so we don't show
 # the wizard on every launch.
@@ -272,12 +287,19 @@ class DualPaneScreen(Screen):
             "Ctrl+C ports Big Bro's reply here"
         )
 
-        model_line = f"model: {self._big_bro_agent.model}"
-        self._router.big_bro_panel.append_system(model_line)
-        self._router.lil_bro_panel.append_system(model_line)
+        big_backend = _backend_name(self._big_bro_agent)
+        lil_backend = _backend_name(self._lil_bro_agent)
+        big_line = f"model: {self._big_bro_agent.model} ({big_backend})"
+        lil_line = f"model: {self._lil_bro_agent.model} ({lil_backend})"
+        self._router.big_bro_panel.append_system(big_line)
+        self._router.lil_bro_panel.append_system(lil_line)
 
-        self._router.big_bro_panel.append_system("connecting to Ollama...")
-        self._router.lil_bro_panel.append_system("connecting to Ollama...")
+        self._router.big_bro_panel.append_system(
+            f"connecting to {big_backend}..."
+        )
+        self._router.lil_bro_panel.append_system(
+            f"connecting to {lil_backend}..."
+        )
         self.run_worker(self._start_agents(), exclusive=True)
 
     async def _start_agents(self) -> None:
@@ -774,7 +796,21 @@ class LilBroLocalApp(App):
         self._model_override = model
         self._url_override = ollama_url
         self._selected_model: str | None = None  # Set by first-run wizard.
+        # Per-bro backend assignment. The first-run wizard overwrites these
+        # via attributes on the App instance (``app._big_backend`` …).
+        # Defaults mirror ``config.yaml`` so existing Phase 0 users keep
+        # booting into Ollama/Ollama without seeing anything new.
+        self._big_backend: str = "ollama"
+        self._big_model: str | None = None
+        self._lil_backend: str = "ollama"
+        self._lil_model: str | None = None
         self._config = load_config()
+        # Config-file assignments win over defaults — the wizard, if shown,
+        # overrides on top of these.
+        self._big_backend = self._config.big_bro.backend
+        self._big_model = self._config.big_bro.model
+        self._lil_backend = self._config.lil_bro.backend
+        self._lil_model = self._config.lil_bro.model
 
     def on_mount(self) -> None:
         base_url = self._url_override or self._config.ollama.base_url
@@ -798,79 +834,121 @@ class LilBroLocalApp(App):
         """
         base_url = self._url_override or self._config.ollama.base_url
         state = _load_state()
-        model = (
+        # Ollama fallback model (used only when a bro's backend is Ollama
+        # and no explicit model was set by wizard / config).
+        ollama_model = (
             self._selected_model
             or state.get("active_model")
             or self._config.ollama.model
         )
-
-        # Save model so we skip the wizard next launch.
-        state["active_model"] = model
+        state["active_model"] = ollama_model
         _save_state(state)
 
-        # -- Resolve context windows -----------------------------------------
+        # -- Resolve context windows (Ollama-only knobs) ----------------------
         project_dir = Path.cwd()
         cfg_big = self._config.ollama.context_window_big
         cfg_lil = self._config.ollama.context_window_lil
 
-        if cfg_big == "auto" or cfg_lil == "auto":
+        needs_ollama = (
+            self._big_backend == "ollama" or self._lil_backend == "ollama"
+        )
+        if needs_ollama and (cfg_big == "auto" or cfg_lil == "auto"):
             vram = detect_vram_mb()
-            auto_big, auto_lil, reason = calculate_context_windows(vram)
-            log.info("VRAM auto-detect: %s", reason)
+            auto_big, auto_lil, reason = calculate_context_windows(
+                vram, model_name=ollama_model, base_url=base_url,
+            )
+            logger.info("VRAM auto-detect: %s", reason)
         else:
-            auto_big, auto_lil = 8192, 4096  # unused fallback
+            auto_big, auto_lil = 8192, 4096
 
         ctx_big = auto_big if cfg_big == "auto" else int(cfg_big)
         ctx_lil = auto_lil if cfg_lil == "auto" else int(cfg_lil)
-        log.info("Context windows: Big Bro %d, Lil Bro %d", ctx_big, ctx_lil)
+        logger.info(
+            "Backends: Big Bro %s/%s · Lil Bro %s/%s",
+            self._big_backend, self._big_model or "(default)",
+            self._lil_backend, self._lil_model or "(default)",
+        )
 
-        # -- Build agents ----------------------------------------------------
-        big_bro = OllamaAgent(
-            base_url=base_url,
-            model=model,
+        # -- Build agents via the CONNECTORS registry -------------------------
+        big_spec: tuple[str, str | None] = (
+            self._big_backend,
+            self._big_model or (ollama_model if self._big_backend == "ollama" else None),
+        )
+        lil_spec: tuple[str, str | None] = (
+            self._lil_backend,
+            self._lil_model or (ollama_model if self._lil_backend == "ollama" else None),
+        )
+
+        big_bro = build_agent(
+            big_spec,
+            role="big",
             display_name="Big Bro",
+            write_access=True,
+            sibling_name="Lil Bro",
+            sibling_backend=f"{self._lil_backend} {self._lil_model or ''}".strip(),
+            # Ollama-only extras — ignored by cloud factories.
+            base_url=base_url,
             system_prompt=CODER_SYSTEM_PROMPT,
             temperature=self._config.ollama.temperature,
             context_window=ctx_big,
             project_dir=project_dir,
-            write_access=True,
+            cwd=project_dir,
         )
 
-        lil_bro = OllamaAgent(
-            base_url=base_url,
-            model=model,
+        lil_bro = build_agent(
+            lil_spec,
+            role="lil",
             display_name="Lil Bro",
+            write_access=False,
+            sibling_name="Big Bro",
+            sibling_backend=f"{self._big_backend} {self._big_model or ''}".strip(),
+            base_url=base_url,
             system_prompt=HELPER_SYSTEM_PROMPT,
             temperature=self._config.ollama.temperature,
             context_window=ctx_lil,
             project_dir=project_dir,
-            write_access=False,
+            cwd=project_dir,
         )
 
         # -- Build panels + status bar ---------------------------------------
         big_bro_panel = BigBroPanel()
         lil_bro_panel = LilBroPanel()
         status_bar = StatusBar()
-        status_bar.set_model(model)
+        # Status bar shows the active Ollama model for legacy reasons —
+        # will be replaced by full backend/model display later in Phase 1.
+        status_bar.set_model(self._big_model or ollama_model)
         status_bar.attach_agents(big_bro, lil_bro)
 
         # -- Cross-talk: each bro can see the other's last reply -------------
-        big_bro.set_sibling(lil_bro_panel, "Lil Bro", agent=lil_bro)
-        lil_bro.set_sibling(big_bro_panel, "Big Bro", agent=big_bro)
+        # Ollama's set_sibling takes (panel, name, agent). Cloud connectors
+        # received sibling metadata at construction and don't need this call.
+        if isinstance(big_bro, OllamaAgent):
+            big_bro.set_sibling(lil_bro_panel, "Lil Bro", agent=lil_bro if isinstance(lil_bro, OllamaAgent) else None)
+        if isinstance(lil_bro, OllamaAgent):
+            lil_bro.set_sibling(big_bro_panel, "Big Bro", agent=big_bro if isinstance(big_bro, OllamaAgent) else None)
 
-        # -- Shared workspace log: bros passively see each other's activity --
-        bros_log_path = project_dir / "BROS_LOG.md"
-        big_bro.set_bros_log(bros_log_path)
-        lil_bro.set_bros_log(bros_log_path)
-
-        # -- Journal + session log -------------------------------------------
+        # -- Journal + unified cross-talk log --------------------------------
+        # Phase 1 consolidates BROS_LOG.md into SESSION.md. Every backend
+        # (Ollama, Claude, Codex) reads the same file — Ollama via
+        # ``set_session_log`` below, cloud connectors via their system
+        # prompt briefing.
         journal = JournalRecorder(
             directory=self._config.journal_dir,
             auto_save=self._config.journal_auto_save,
         )
 
-        session_log = SessionLogStreamer(path=Path.cwd() / "SESSION.md")
+        session_log_path = project_dir / "SESSION.md"
+        session_log = SessionLogStreamer(path=session_log_path)
         journal.attach_streamer(session_log)
+
+        # Ollama reads SESSION.md directly to inject sibling context on
+        # every turn. The target argument is the ``big`` / ``bro`` label
+        # written by the recorder on the SIBLING'S lines — i.e. Big Bro
+        # watches ``bro`` lines, Lil Bro watches ``big`` lines.
+        if hasattr(big_bro, "set_session_log"):
+            big_bro.set_session_log(session_log_path, sibling_target="bro")
+        if hasattr(lil_bro, "set_session_log"):
+            lil_bro.set_session_log(session_log_path, sibling_target="big")
 
         # -- RPG profile + skill tracker -------------------------------------
         try:
@@ -995,6 +1073,13 @@ class LilBroLocalApp(App):
 
 
 def main() -> None:
+    # Redirect __pycache__ folders into one hidden dir so users don't
+    # see bytecode scattered across every package folder.
+    import sys as _sys
+    _cache_dir = Path.home() / ".lilbro-local" / ".pycache"
+    _cache_dir.mkdir(parents=True, exist_ok=True)
+    _sys.pycache_prefix = str(_cache_dir)
+
     parser = argparse.ArgumentParser(
         description="LIL BRO LOCAL -- dual-pane local model TUI"
     )

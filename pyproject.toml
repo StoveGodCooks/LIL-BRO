@@ -11,6 +11,7 @@ dependencies = [
     "textual>=0.80.0",
     "pyyaml>=6.0",
     "httpx>=0.27.0",
+    "pillow>=10.0",
 ]
 
 [project.scripts]
@@ -18,3 +19,10 @@ lilbro-local = "src_local.app:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src_local"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100

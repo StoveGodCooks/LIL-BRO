@@ -30,6 +30,8 @@ from typing import TYPE_CHECKING, Any
 
 import httpx
 
+from src_local.agents.base import AgentProcess
+
 if TYPE_CHECKING:
     from src_local.ui.panels import _BasePanel
 
@@ -276,10 +278,18 @@ HELPER_BUNKBED_PROMPT = _build_system_prompt(
 # ---------------------------------------------------------------------------
 
 # Pattern for what small models output instead of structured tool_calls:
-# {"name": "tool_name", "arguments": {...}}
+# Format A (common): {"name": "tool_name", "arguments": {...}}
+# Format B (Llama):  {"type": "function", "function": {"name": "...", "arguments": {...}}}
 # They may wrap it in a code fence or output it bare.
 _TEXT_TOOL_RE = re.compile(
     r'\{[^{}]*"name"\s*:\s*"(\w+)"[^{}]*"arguments"\s*:\s*(\{(?:[^{}]|\{[^{}]*\})*\})[^{}]*\}',
+    re.DOTALL,
+)
+# Llama 3.1+ wraps tool calls in {"type":"function","function":{...}}.
+_TEXT_TOOL_LLAMA_RE = re.compile(
+    r'\{\s*"type"\s*:\s*"function"\s*,\s*"function"\s*:\s*'
+    r'\{[^{}]*"name"\s*:\s*"(\w+)"[^{}]*"arguments"\s*:\s*(\{(?:[^{}]|\{[^{}]*\})*\})[^{}]*\}'
+    r'\s*\}',
     re.DOTALL,
 )
 
@@ -292,11 +302,16 @@ def _extract_text_tool_calls(
     Returns (tool_calls_list, cleaned_text).  tool_calls_list is in the
     same format as Ollama structured tool_calls so the existing tool loop
     can handle them unchanged.  cleaned_text has the JSON blocks stripped.
+
+    Supports two formats:
+      A) {"name": "tool", "arguments": {...}}          (Qwen, Mistral, etc.)
+      B) {"type":"function","function":{"name":...}}   (Llama 3.1+)
     """
     tool_calls: list[dict] = []
     cleaned = text
 
-    for match in _TEXT_TOOL_RE.finditer(text):
+    # Try Llama-style first (more specific, avoids double-matching).
+    for match in _TEXT_TOOL_LLAMA_RE.finditer(cleaned):
         tool_name = match.group(1)
         args_str = match.group(2)
         try:
@@ -304,10 +319,20 @@ def _extract_text_tool_calls(
         except json.JSONDecodeError:
             continue
         tool_calls.append({"function": {"name": tool_name, "arguments": arguments}})
-        # Strip this block from the display text.
         cleaned = cleaned.replace(match.group(0), "", 1)
 
-    # Also strip common code-fence wrappers the model may add around the JSON.
+    # Then try the standard format on whatever text remains.
+    for match in _TEXT_TOOL_RE.finditer(cleaned):
+        tool_name = match.group(1)
+        args_str = match.group(2)
+        try:
+            arguments = json.loads(args_str)
+        except json.JSONDecodeError:
+            continue
+        tool_calls.append({"function": {"name": tool_name, "arguments": arguments}})
+        cleaned = cleaned.replace(match.group(0), "", 1)
+
+    # Strip common code-fence wrappers the model may add around the JSON.
     cleaned = re.sub(r"```(?:json)?\s*\n?", "", cleaned)
     cleaned = cleaned.strip()
 
@@ -329,12 +354,17 @@ class _TurnResult:
 # Agent
 # ---------------------------------------------------------------------------
 
-class OllamaAgent:
+class OllamaAgent(AgentProcess):
     """HTTP-based agent that talks to a local Ollama daemon.
 
     Each instance maintains its own chat history and can be configured
-    with a different model, system prompt, and display name.
+    with a different model, system prompt, and display name. Extends
+    ``AgentProcess`` for shared lifecycle plumbing (lock, task tracking,
+    heartbeat, RSS monitor, cancel) so all connectors present the same
+    interface to the router.
     """
+
+    RESTART_KEY = "ollama"
 
     def __init__(
         self,
@@ -349,6 +379,8 @@ class OllamaAgent:
         write_access: bool = True,
         tools_enabled: bool = True,
     ) -> None:
+        super().__init__()
+        self.DISPLAY_NAME = display_name
         self.base_url = base_url.rstrip("/")
         self.model = model
         self.display_name = display_name
@@ -362,18 +394,17 @@ class OllamaAgent:
             {"role": "system", "content": system_prompt},
         ]
         self._client: httpx.AsyncClient | None = None
-        self._lock = asyncio.Lock()
-        self._current_task: asyncio.Task | None = None
-        self._tasks: set[asyncio.Task] = set()
-        self._turn_started_at: float | None = None
         self._cancelled = False
-        # Cross-talk via shared workspace log.
-        self._bros_log: Path | None = None
+        # Cross-talk via SESSION.md live-stream tail (Phase 1 unification).
+        # ``_session_log_path`` points at ``<project_dir>/SESSION.md`` and
+        # ``_sibling_target`` is the ``big`` / ``bro`` label on SESSION.md
+        # lines that this agent should pick up as sibling activity.
+        self._session_log_path: Path | None = None
+        self._sibling_target: str = ""
         self._sibling_name: str = ""
         self._sibling_agent: "OllamaAgent | None" = None
         self._sibling_panel: "_BasePanel | None" = None
-        # Heartbeat: rotating working phrases while a turn is in flight.
-        self._last_activity_at: float | None = None
+        # Ollama-specific heartbeat task (30 s cadence, streaming-aware).
         self._heartbeat_task: asyncio.Task | None = None
         # Track whether this bro is currently busy (for idle roast logic).
         self._busy = False
@@ -394,9 +425,25 @@ class OllamaAgent:
         self._sibling_agent = agent
         self._sibling_panel = panel  # for live struggle notifications
 
-    def set_bros_log(self, path: Path) -> None:
-        """Set the shared workspace log path."""
-        self._bros_log = path
+    def set_session_log(self, path: Path, sibling_target: str) -> None:
+        """Point this agent at the shared ``SESSION.md`` tail.
+
+        ``sibling_target`` is the pane label (``"big"`` or ``"bro"``) whose
+        ``AGENT`` / ``TOOL`` / ``FILE`` lines we should surface back to this
+        agent as sibling context. Any prior ``BROS_LOG.md`` wiring is
+        ignored once this has been set — SESSION.md is now the unified
+        cross-talk layer across all backends.
+        """
+        self._session_log_path = path
+        self._sibling_target = sibling_target
+
+    def set_bros_log(self, path: Path) -> None:  # noqa: ARG002
+        """Legacy no-op kept for call-site parity.
+
+        Cross-talk moved from ``BROS_LOG.md`` to ``SESSION.md`` in Phase 1.
+        Callers should use :meth:`set_session_log` instead.
+        """
+        return
 
     def update_system_prompt(self, prompt: str) -> None:
         """Replace the system prompt in history."""
@@ -426,13 +473,9 @@ class OllamaAgent:
         """Post the YERRR intro message to the panel."""
         from src_local.agents.phrases import BIG_BRO_INTRO, LIL_BRO_INTRO
         if "Big" in self.display_name:
-            panel.append_system(BIG_BRO_INTRO)
+            panel.append_intro(BIG_BRO_INTRO)
         else:
-            panel.append_system(LIL_BRO_INTRO)
-
-    def note_activity(self) -> None:
-        """Mark that this agent produced output (resets heartbeat timer)."""
-        self._last_activity_at = time.monotonic()
+            panel.append_intro(LIL_BRO_INTRO)
 
     async def _heartbeat_watch(self, panel: "_BasePanel") -> None:
         """Post rotating working phrases while a turn runs.
@@ -456,20 +499,26 @@ class OllamaAgent:
         except asyncio.CancelledError:
             pass
 
-    def request(self, prompt: str, panel: "_BasePanel") -> None:
-        """Fire-and-forget request. Serializes via asyncio.Lock."""
+    async def _confirm_command(self, command: str, panel: "_BasePanel") -> bool:
+        """Show a modal asking the user to approve a shell command.
+
+        Returns True if approved, False if denied.
+        """
+        import asyncio as _aio
+        from src_local.ui.confirm_command import ConfirmCommandScreen
+
+        future: _aio.Future[bool] = _aio.get_running_loop().create_future()
+
+        def _on_result(approved: bool | None) -> None:
+            if not future.done():
+                future.set_result(bool(approved))
+
         try:
-            loop = asyncio.get_running_loop()
-        except RuntimeError:
-            logger.error("request called outside running event loop")
-            return
-        task = loop.create_task(
-            self._request_locked(prompt, panel),
-            name=f"{self.display_name}-turn",
-        )
-        self._tasks.add(task)
-        self._current_task = task
-        task.add_done_callback(self._tasks.discard)
+            panel.app.push_screen(ConfirmCommandScreen(command), _on_result)
+        except Exception:  # noqa: BLE001
+            # If the modal can't be shown (e.g., headless), deny by default.
+            return False
+        return await future
 
     async def _request_locked(self, prompt: str, panel: "_BasePanel") -> None:
         async with self._lock:
@@ -477,7 +526,7 @@ class OllamaAgent:
             self._last_activity_at = time.monotonic()
             self._cancelled = False
             self._busy = True
-            # Start heartbeat watcher for working phrases.
+            # Start Ollama's 30 s streaming-aware heartbeat watcher.
             self._heartbeat_task = asyncio.create_task(
                 self._heartbeat_watch(panel),
                 name=f"{self.display_name}-heartbeat",
@@ -719,84 +768,70 @@ class OllamaAgent:
         )
 
     def _inject_sibling_context(self, prompt: str) -> str:
-        """Read the shared BROS_LOG to see what the sibling has been doing.
+        """Peek at ``SESSION.md`` to see what the sibling pane has been up to.
 
-        The log is a lightweight file that both bros write summaries to
-        after each turn. Each bro reads the OTHER bro's entries to stay
-        aware without direct communication.
+        All backends (Ollama, Claude, Codex) write live breadcrumbs to a
+        shared ``SESSION.md`` ``## Live Stream`` section — one line per
+        event in the shape ``[HH:MM:SS] KIND target: body``. We grep the
+        tail for lines whose ``target`` matches the sibling and inject a
+        handful into this turn's prompt so Ollama has the same
+        peripheral awareness a cloud connector gets from its briefing.
         """
-        if self._bros_log is None or not self._bros_log.exists():
+        if self._session_log_path is None or not self._sibling_target:
+            return prompt
+        if not self._session_log_path.exists():
             return prompt
         try:
-            content = self._bros_log.read_text(encoding="utf-8", errors="replace")
-            if not content.strip():
-                return prompt
-            # Only grab lines from the sibling (not our own).
-            sibling_lines = []
-            for line in content.strip().splitlines():
-                if line.startswith(f"[{self._sibling_name}]"):
-                    sibling_lines.append(line)
-            if not sibling_lines:
-                return prompt
-            # Keep last 5 entries, cap total chars.
-            recent = sibling_lines[-5:]
-            sibling_summary = "\n".join(recent)
-            if len(sibling_summary) > 800:
-                sibling_summary = sibling_summary[-800:]
-            return (
-                f"[What {self._sibling_name} has been working on — peek at the shared log]\n"
-                f"{sibling_summary}\n\n"
-                f"{prompt}"
+            content = self._session_log_path.read_text(
+                encoding="utf-8", errors="replace"
             )
-        except Exception:  # noqa: BLE001
+        except OSError:
+            return prompt
+        if not content.strip():
             return prompt
 
-    def _log_turn_summary(self, prompt: str, response: str) -> None:
-        """Write a brief summary of this turn to the shared BROS_LOG.
+        # Only surface meaningful sibling activity. USER lines are the
+        # human talking, SESSION banners are boilerplate — skipping them
+        # keeps the injected context tight.
+        target_tag = f" {self._sibling_target}:"
+        kinds_to_keep = ("AGENT", "TOOL", "FILE", "CMD", "ERROR", "DECISION")
+        sibling_lines: list[str] = []
+        for line in content.splitlines():
+            if target_tag not in line:
+                continue
+            # Strip the timestamp to sniff the kind: ``[HH:MM:SS] KIND target: ...``
+            stripped = line.split("] ", 1)[-1]
+            if not any(stripped.startswith(k) for k in kinds_to_keep):
+                continue
+            sibling_lines.append(line)
 
-        Also drops an idle roast about the sibling if they're not busy.
+        if not sibling_lines:
+            return prompt
+
+        recent = sibling_lines[-5:]
+        sibling_summary = "\n".join(recent)
+        if len(sibling_summary) > 800:
+            sibling_summary = sibling_summary[-800:]
+        sib = self._sibling_name or "the other pane"
+        return (
+            f"[What {sib} has been working on — tail of SESSION.md live stream]\n"
+            f"{sibling_summary}\n\n"
+            f"{prompt}"
+        )
+
+    def _log_turn_summary(self, prompt: str, response: str) -> None:  # noqa: ARG002
+        """Deprecated — turn summaries now flow through SESSION.md.
+
+        The JournalRecorder streams every ``AGENT`` line to
+        ``SESSION.md`` automatically, so the old BROS_LOG double-write is
+        redundant. Kept as a no-op so the per-turn call site stays
+        unchanged until Phase 1 wiring is fully torn out.
         """
-        if self._bros_log is None:
-            return
-        try:
-            from src_local.agents.phrases import get_idle_roast
-
-            # Build a 1-line summary: what we were asked + what we did.
-            ask = prompt[:80].replace("\n", " ").strip()
-            if len(prompt) > 80:
-                ask += "..."
-            # Summarize the response briefly.
-            resp = response[:120].replace("\n", " ").strip()
-            if len(response) > 120:
-                resp += "..."
-            stamp = time.strftime("%H:%M:%S")
-            entry = f"[{self.display_name}] {stamp} | asked: {ask} | answered: {resp}\n"
-
-            # If the sibling is idle, drop a roast in the log.
-            who = "big" if "Big" in self.display_name else "bro"
-            sibling_idle = (
-                self._sibling_agent is not None
-                and not self._sibling_agent._busy
-            )
-            if sibling_idle and random.random() < 0.4:
-                roast = get_idle_roast(who)
-                entry += f"[{self.display_name}] {stamp} | 💬 {roast}\n"
-
-            # Append to the log (create if needed).
-            with open(self._bros_log, "a", encoding="utf-8") as f:
-                f.write(entry)
-            # Keep log from growing too large — trim to last 20 entries.
-            lines = self._bros_log.read_text(encoding="utf-8").splitlines()
-            if len(lines) > 20:
-                self._bros_log.write_text(
-                    "\n".join(lines[-20:]) + "\n", encoding="utf-8"
-                )
-        except Exception:  # noqa: BLE001
-            pass
+        return
 
     def _notify_sibling_struggling(self, panel: "_BasePanel", prompt: str) -> None:
         """Tell the sibling bro — live — that this bro is having trouble."""
-        sibling_name = self._sibling_name or "the other bro"
+        _sibling_name = self._sibling_name or "the other bro"  # noqa: F841
         my_name = self.display_name
         short_prompt = prompt[:60].replace("\n", " ").strip()
         if len(prompt) > 60:
@@ -804,7 +839,7 @@ class OllamaAgent:
 
         # Post in THIS bro's panel as a heads-up.
         panel.append_system(
-            f"(hitting some errors on this — gonna try one more approach...)"
+            "(hitting some errors on this — gonna try one more approach...)"
         )
 
         # Post in the SIBLING'S panel so they see it live.
@@ -963,29 +998,31 @@ class OllamaAgent:
                     except json.JSONDecodeError:
                         tool_args = {}
 
-                # Show tool call in panel.
                 path_arg = tool_args.get("path") or tool_args.get("command", "")
                 label = TOOL_DISPLAY_LABELS.get(tool_name, tool_name)
-                panel.append_file_action(label, str(path_arg))
 
-                # Show diff preview for edit_file.
-                if tool_name == "edit_file" and "old_string" in tool_args:
-                    try:
-                        panel.append_diff(
-                            tool_args.get("path", ""),
-                            tool_args["old_string"],
-                            tool_args.get("new_string", ""),
+                # run_command requires user confirmation before execution.
+                if tool_name == "run_command":
+                    approved = await self._confirm_command(
+                        tool_args.get("command", ""), panel
+                    )
+                    if not approved:
+                        tool_result = "Error: command denied by user."
+                        panel.append_system("(command denied)")
+                    else:
+                        tool_result = await execute_tool(
+                            tool_name, tool_args,
+                            project_dir=self.project_dir,
+                            write_access=self._write_access,
                         )
-                    except Exception:  # noqa: BLE001
-                        pass
-
-                # Execute the tool.
-                tool_result = await execute_tool(
-                    tool_name,
-                    tool_args,
-                    project_dir=self.project_dir,
-                    write_access=self._write_access,
-                )
+                else:
+                    # Execute the tool.
+                    tool_result = await execute_tool(
+                        tool_name,
+                        tool_args,
+                        project_dir=self.project_dir,
+                        write_access=self._write_access,
+                    )
 
                 # Hybrid merge: if this is a bible tool, merge with
                 # pre-retrieved candidates for confidence scoring.
@@ -1007,6 +1044,33 @@ class OllamaAgent:
                 # Track errors for the retry/failure system.
                 if tool_result.startswith("Error:"):
                     round_had_error = True
+
+                # Mount a yellow collapsible block — summary when collapsed,
+                # full output on click. For edits, prepend a unified diff.
+                try:
+                    summary = f"{label} {path_arg}".strip() or label
+                    detail = tool_result
+                    if tool_name == "edit_file" and "old_string" in tool_args:
+                        import difflib
+                        diff_lines = list(
+                            difflib.unified_diff(
+                                tool_args["old_string"].splitlines(keepends=True),
+                                tool_args.get("new_string", "").splitlines(keepends=True),
+                                fromfile="before",
+                                tofile="after",
+                                n=3,
+                            )
+                        )
+                        if diff_lines:
+                            diff_text = "".join(diff_lines)
+                            detail = f"--- diff ---\n{diff_text}\n--- result ---\n{tool_result}"
+                    panel.append_tool_call(
+                        summary,
+                        detail=detail,
+                        path=str(path_arg) if path_arg else None,
+                    )
+                except Exception:  # noqa: BLE001
+                    pass
 
                 # Add tool result to history.
                 self._history.append({
@@ -1139,23 +1203,14 @@ class OllamaAgent:
         self._history = [system] + recent
 
     def cancel_in_flight(self) -> bool:
-        """Cancel the currently-running turn."""
+        """Cancel the currently-running turn.
+
+        Sets ``_cancelled`` first so the inline stream loop can drop
+        further chunks even if the asyncio.Task cancellation hasn't
+        propagated yet, then delegates to the base-class implementation.
+        """
         self._cancelled = True
-        task = self._current_task
-        if task is None or task.done():
-            return False
-        task.cancel()
-        return True
-
-    def is_busy(self) -> bool:
-        task = self._current_task
-        return task is not None and not task.done()
-
-    def busy_for(self) -> float | None:
-        started = self._turn_started_at
-        if started is None:
-            return None
-        return max(0.0, time.monotonic() - started)
+        return super().cancel_in_flight()
 
     def clear_history(self) -> None:
         """Reset conversation history, keeping only the system prompt."""

@@ -1,24 +1,19 @@
-"""Inline slash-command palette.
+"""Inline slash-command palette with rolodex scrolling.
 
 When the user types `/` as the first character in the input bar, this
 widget pops up just above the input with a live-filtered list of all
 available slash commands. Navigation:
 
     Type more chars   -> filter narrows in real time
-    Up / Down         -> move selection highlight
+    Up / Down         -> move selection highlight (wraps & scrolls)
     Tab              -> accept the highlighted command into the input
     Enter            -> submit the raw input (palette is only a helper)
     Esc              -> dismiss the palette (keeps input text)
 
-The palette is a passive display -- it never submits or mutates the
-input by itself. The `InputBar` owns all keyboard interaction and
-calls `filter(query)`, `move_selection(delta)`, and `current_command()`
-on it.
-
-Rendering: one `Static` child per visible row. Each row shows the
-command name in a color matching its target, followed by the
-description in dim text. The currently-selected row has a lime
-background bar.
+The palette uses a windowed "rolodex" view: only VISIBLE_ROWS rows
+are rendered at once. As the selection moves past the visible window,
+the window shifts to follow it, with scroll indicators (▲/▼) showing
+how many items are above/below.
 """
 
 from __future__ import annotations
@@ -31,10 +26,12 @@ from textual.widgets import Static
 from src_local.ui.commands_meta import COMMANDS, canonical_trigger, filter_commands
 
 
-# Max number of rows the palette will render at once. If more commands
-# match, the excess are hidden; filter further to reach them.
-# 25 is enough to show all current commands unfiltered with room to grow.
-MAX_ROWS = 25
+# Number of command rows visible at once. The window scrolls around
+# the selection like a rolodex.
+VISIBLE_ROWS = 12
+
+# Max rows we'll ever render (allocated on mount).
+MAX_ROWS = VISIBLE_ROWS
 
 
 # Color used for commands that target Big Bro.
@@ -56,7 +53,7 @@ def _target_color(target: str) -> str:
 
 
 class CommandPalette(Vertical):
-    """Floating slash-command picker above the input bar."""
+    """Floating slash-command picker above the input bar (rolodex style)."""
 
     DEFAULT_CSS = ""  # all styling lives in app.tcss for consistency
 
@@ -65,6 +62,8 @@ class CommandPalette(Vertical):
         self._query: str = ""
         self._matches: list[tuple[str, str, str]] = list(COMMANDS)
         self._selection: int = 0
+        # The index of the first visible row in the match list.
+        self._window_start: int = 0
         # Row widgets are created lazily on the first show() so this
         # constructor stays cheap.
         self._rows: list[Static] = []
@@ -75,11 +74,12 @@ class CommandPalette(Vertical):
 
     def compose(self) -> ComposeResult:
         yield Static("slash commands", id="palette-header")
-        yield Static("", id="palette-hint")
+        yield Static("", id="palette-scroll-up", classes="palette-scroll-hint")
         for i in range(MAX_ROWS):
             row = Static("", classes="palette-row")
             self._rows.append(row)
             yield row
+        yield Static("", id="palette-scroll-down", classes="palette-scroll-hint")
 
     def on_mount(self) -> None:
         # Start hidden -- the InputBar shows it when user types '/'.
@@ -109,18 +109,21 @@ class CommandPalette(Vertical):
         # Clamp selection whenever the match list changes.
         if self._selection >= len(self._matches):
             self._selection = max(0, len(self._matches) - 1)
+        self._adjust_window()
         self._refresh_rows()
 
     def move_selection(self, delta: int) -> None:
         """Move the selection highlight by delta rows (wraps around)."""
         if not self._matches:
             return
-        n = min(len(self._matches), MAX_ROWS)
+        n = len(self._matches)
         self._selection = (self._selection + delta) % n
+        self._adjust_window()
         self._refresh_rows()
 
     def reset_selection(self) -> None:
         self._selection = 0
+        self._window_start = 0
 
     def current_command(self) -> str | None:
         """The canonical trigger of the selected row (e.g. ``"/plan"``),
@@ -137,37 +140,81 @@ class CommandPalette(Vertical):
         return self._matches[min(self._selection, len(self._matches) - 1)]
 
     # -----------------------------------------------------------------
+    # Window management (rolodex)
+    # -----------------------------------------------------------------
+
+    def _adjust_window(self) -> None:
+        """Shift the visible window so the selection is always on screen."""
+        n = len(self._matches)
+        if n <= VISIBLE_ROWS:
+            self._window_start = 0
+            return
+
+        # If selection is above the window, shift up.
+        if self._selection < self._window_start:
+            self._window_start = self._selection
+        # If selection is below the window, shift down.
+        elif self._selection >= self._window_start + VISIBLE_ROWS:
+            self._window_start = self._selection - VISIBLE_ROWS + 1
+
+        # Clamp.
+        self._window_start = max(0, min(self._window_start, n - VISIBLE_ROWS))
+
+    # -----------------------------------------------------------------
     # Rendering
     # -----------------------------------------------------------------
 
     def _refresh_rows(self) -> None:
         # If we haven't been mounted yet, bail out -- on_mount will call us.
-        # NOTE: do NOT rename this to `_render` -- that collides with
-        # Textual's internal Widget._render() and breaks the render loop
-        # (AttributeError: 'NoneType' object has no attribute 'render_strips').
         if not self._rows:
             return
 
-        visible_matches = self._matches[:MAX_ROWS]
+        n = len(self._matches)
+        window_end = min(self._window_start + VISIBLE_ROWS, n)
+        visible_matches = self._matches[self._window_start:window_end]
 
         # Update header showing match count + hint line.
         try:
             header = self.query_one("#palette-header", Static)
-            total = len(self._matches)
-            if total == 0:
+            if n == 0:
                 header.update(
                     Text("no matching commands", style="italic #888888")
                 )
-            elif total == 1:
+            elif n == 1:
                 header.update(
                     Text("1 match  ·  Tab to complete  ·  Esc to cancel",
                          style="#888888")
                 )
             else:
+                pos_text = f"[{self._selection + 1}/{n}]"
                 header.update(
-                    Text(f"{total} matches  ·  ↑↓ select  ·  Tab complete  ·  Esc cancel",
+                    Text(f"{pos_text}  ·  ↑↓ select  ·  Tab complete  ·  Esc cancel",
                          style="#888888")
                 )
+        except Exception:  # noqa: BLE001
+            pass
+
+        # Scroll indicators.
+        above = self._window_start
+        below = max(0, n - window_end)
+        try:
+            up_hint = self.query_one("#palette-scroll-up", Static)
+            if above > 0:
+                up_hint.update(Text(f"  ▲ {above} more above", style="dim #666666"))
+                up_hint.display = True
+            else:
+                up_hint.update("")
+                up_hint.display = False
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            down_hint = self.query_one("#palette-scroll-down", Static)
+            if below > 0:
+                down_hint.update(Text(f"  ▼ {below} more below", style="dim #666666"))
+                down_hint.display = True
+            else:
+                down_hint.update("")
+                down_hint.display = False
         except Exception:  # noqa: BLE001
             pass
 
@@ -185,6 +232,7 @@ class CommandPalette(Vertical):
                 row_widget.display = False
                 continue
             row_widget.display = True
+            actual_index = self._window_start + i
             name, target, desc = visible_matches[i]
             line = Text()
             # Command name in its target color.
@@ -196,7 +244,7 @@ class CommandPalette(Vertical):
             line.append("  ")
             line.append(desc, style="#CCCCCC")
 
-            if i == self._selection:
+            if actual_index == self._selection:
                 row_widget.add_class("selected")
             else:
                 row_widget.remove_class("selected")
