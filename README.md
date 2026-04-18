@@ -4,24 +4,24 @@
   <img src="assets/logo.png" alt="THE BROS — local-model coding TUI" width="480"/>
 </p>
 
-**A local AI coding assistant that runs entirely on your machine.** No API keys, no cloud, no billing. Just you, your GPU, and two bros who won't stop arguing.
+**A model-agnostic AI coding assistant that lives on your machine.** No required API keys. No cloud billing. Just you, your GPU, and two bros who won't stop arguing.
 
-LiL BRO is a dual-agent TUI (terminal user interface) that wraps [Ollama](https://ollama.com) to give you two AI coding assistants working side by side:
+LiL BRO is a dual-agent TUI (terminal user interface) that runs two AI coding assistants side by side. Each bro can be powered by a different backend — local Ollama, Claude Code CLI, or Codex CLI — and you can mix and match however you want.
 
-- **Big Bro** (right pane) — the coder. Reads, writes, and edits your files. Runs commands. Gets things done.
-- **Lil Bro** (left pane) — the helper. Read-only. Explains code, debugs logic, teaches concepts. The brains.
+- **Big Bro** — the coder. Reads, writes, and edits your files. Runs commands. Gets things done.
+- **Lil Bro** — the helper. Read-only by default. Explains code, debugs logic, teaches concepts.
 
-They share a workspace, they know about each other, and they will absolutely talk trash when the other one is idle.
+They share a workspace, they know about each other's moves via a live `SESSION.md` log, and they will absolutely talk trash when the other one is idle.
 
 ![Status](https://img.shields.io/badge/status-beta-red)
 ![Python](https://img.shields.io/badge/python-3.11+-blue)
 ![License](https://img.shields.io/badge/license-PolyForm%20NC-blue)
 ![Ollama](https://img.shields.io/badge/powered%20by-Ollama-orange)
+![Claude](https://img.shields.io/badge/powered%20by-Claude%20Code%20CLI-8B5CF6)
+![Codex](https://img.shields.io/badge/powered%20by-Codex%20CLI-10B981)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey)
-![macOS](https://img.shields.io/badge/macOS-supported-green)
-![Linux](https://img.shields.io/badge/Linux-supported-green)
 
-> ⚠️ **LiL BRO is in beta.** Expect rough edges, missing features, and the occasional bro meltdown. Things will break. We're building in public and moving fast — feedback and bug reports welcome.
+> **LiL BRO is in beta.** Expect rough edges and the occasional bro meltdown. We're building in public and moving fast — feedback and bug reports welcome.
 
 > **Platform note:** LiL BRO runs on **Windows, macOS, and Linux**. Apple Silicon (M1/M2/M3/M4) is fully supported — Ollama runs natively on Metal and the bros will detect your unified memory automatically.
 
@@ -29,103 +29,143 @@ They share a workspace, they know about each other, and they will absolutely tal
 
 ## How It Works
 
-LiL BRO runs a local Ollama model (default: `qwen2.5-coder:7b`) and gives it real tools — file reading, code search, file editing, shell commands, and a knowledge base called Grandpa. Everything stays on your machine.
-
 ```
  YOU
   |
   v
 [Input Bar] --Tab--> switches between Big Bro / Lil Bro
   |
-  +---> Big Bro (coder) ---> Ollama 7b ---> tools (read/write/edit/run)
-  |                                    \--> Grandpa (knowledge base)
+  +---> Big Bro  ---> [Backend: Ollama | Claude | Codex]
+  |                   tools: read/write/edit/grep/run
   |
-  +---> Lil Bro (helper) ---> Ollama 7b ---> tools (read-only)
-                                         \--> Grandpa (knowledge base)
+  +---> Lil Bro  ---> [Backend: Ollama | Claude | Codex | FLEX]
+                      tools: read-only (or write via /bunkbed)
 ```
 
-Both bros talk to the same local model. The difference is their **system prompt** (personality, rules, role) and their **tool access** (Big Bro can write, Lil Bro can't — unless you turn on Bunkbed mode).
+Both bros talk to the same shared `SESSION.md` log so each can see what the other is doing — live, across all backends. You port context between them with Ctrl+B / Ctrl+C.
+
+---
+
+## Backends
+
+LiL BRO is **model-agnostic**. Each bro is assigned its own backend independently. All three backends are subscription-based (no API keys required).
+
+| Backend | How | Requirement |
+|---------|-----|-------------|
+| **Ollama** | Local HTTP streaming | Ollama installed |
+| **Claude Code CLI** | `claude` subprocess, stream-json mode | Claude Max / Pro subscription |
+| **Codex CLI** | `codex` subprocess, JSON-RPC 2.0 | ChatGPT Plus / Pro subscription |
+
+Set backends in `config.yaml`:
+
+```yaml
+# Shorthand
+big_bro: claude/claude-sonnet-4-5
+lil_bro: ollama/qwen2.5-coder:7b
+
+# Long form
+big_bro:
+  backend: claude
+  model: claude-opus-4-7
+lil_bro:
+  backend: codex
+  model: gpt-4o
+```
+
+Or use `/model big <name>` / `/model lil <name>` to switch live.
 
 ---
 
 ## Features
 
 ### Dual-Agent Layout
-Two panes, two personalities. Tab between them. Ask Big Bro to write code, ask Lil Bro to explain it. They work on the same project simultaneously.
+Two panes, two personalities. Tab between them. Ask Big Bro to write code, ask Lil Bro to explain it. They work on the same project simultaneously. Big Bro's text streams in **orange**, Lil Bro's in **green** — you always know who's talking.
+
+### Live Tool Call Feed
+When a bro is working, every tool call appears as a **collapsible yellow entry** — collapsed shows a short summary, click to expand for full detail:
+- `Read` → shows the file contents
+- `Edit` → shows the unified diff (before/after)
+- `Bash` → shows the shell command
+- `Write` → shows the full file being written
+
+No more guessing what the model is doing. Watch it happen.
+
+### Multi-Backend Support (Phase 1)
+Each bro runs its own backend independently. Mix and match:
+
+```
+Big Bro: Claude Code CLI  →  writes code, runs tests, edits files
+Lil Bro: Ollama local     →  explains logic, reviews diffs, teaches
+```
+
+Or go all-local:
+
+```
+Big Bro: Ollama (qwen2.5-coder:14b)
+Lil Bro: Ollama (qwen2.5-coder:7b)
+```
+
+Or all-cloud during deep work sessions:
+
+```
+Big Bro: Claude (opus-4)
+Lil Bro: Codex (gpt-4o)
+```
+
+### Session Continuity (Claude / Codex)
+Claude and Codex backends maintain persistent session context across the life of the subprocess. Every connection prints a short session tag like `[abc12345]`. If you restart and want to continue that thread:
+
+```
+/resume abc12345         — resumes in Big Bro on next /restart
+/resume lil cafe5678     — resumes in Lil Bro
+```
+
+Working in a registered project? Session is auto-saved and auto-resumed on next launch. Start completely fresh anytime with `/reset`.
 
 ### Grandpa (Knowledge Base)
 Both bros have access to **Grandpa** — a local knowledge base with two bibles:
 
-- **Coding Bible** — API docs, syntax references, stdlib patterns, code examples, data structure guides
-- **Reasoning Bible** — debugging strategies, algorithm analysis, design tradeoffs, estimation techniques
+- **Coding Bible** — API docs, syntax references, stdlib patterns, code examples
+- **Reasoning Bible** — debugging strategies, algorithm analysis, design tradeoffs
 
 Grandpa uses **hybrid retrieval**:
-1. **Pre-scan**: When you ask a question, keywords from your query are matched against bible entry tags to pull candidate references
-2. **Model pull**: The model also calls `coding_lookup` / `reasoning_lookup` tools with a smarter, inferred query
-3. **Merge**: Results from both retrievers are merged with confidence scoring — entries that both retrievers agree on are marked as high confidence and shown first
+1. **Pre-scan** — keywords from your query matched against bible entry tags
+2. **Model pull** — the model calls `coding_lookup` / `reasoning_lookup` tools with a smarter inferred query
+3. **Merge** — results merged with confidence scoring; entries both retrievers agree on shown first
 
-This means even if the model writes a bad search query, the keyword pre-scan catches relevant entries. And even if keywords miss the right entry, the model's semantic understanding fills the gap.
+> Grandpa is Ollama-only. Claude and Codex backends already carry that knowledge — they don't need it injected.
 
 ### Shared Workspace Log (SESSION.md)
-Every backend — Ollama, Claude, and Codex — reads and writes the same `SESSION.md` file at the project root. LIL BRO streams append-only breadcrumbs into a `## Live Stream` section as work happens: user prompts, agent replies, tool calls, file edits, errors. Each pane can see what the other has been doing — it gets injected into their context automatically. This is passive cross-talk: they don't message each other directly, but they're aware of each other's work across all three backends.
+Every backend reads and writes the same `SESSION.md` at your project root. LIL BRO streams append-only breadcrumbs as work happens — user prompts, agent replies, tool calls, file edits. Each bro can see what the other is doing across all backends, passively, without direct messaging.
+
+### Clipboard Screenshot Paste
+Press **Ctrl+Shift+V** to paste a screenshot directly from your clipboard. LIL BRO saves it to `~/.lilbro-local/tmp/` and injects the file path into your input bar — no manual file saving required. Attach UI screenshots, error dialogs, or reference images to your messages.
+
+### BYOM — Bring Your Own Model
+LiL BRO supports any model Ollama can run. The first-run wizard has curated picks (Qwen Coder, DeepSeek, Codestral, Llama, Phi) plus a Custom option. Context windows are calculated dynamically from the model's architecture — no manual tuning needed. GGUF imports and custom fine-tunes work too: `ollama create mymodel -f Modelfile`, then `/model mymodel`.
 
 ### Bro Bickering
 The bros have personality. They:
-- **Introduce themselves** on startup with a YERRR message
-- **Post working phrases** while processing ("hold on, I'm cooking...", "lemme think about this one...")
-- **Roast each other** when one is idle and the other is working ("Lil Bro over there taking a nap while I do all the work")
-- **Notify each other** when one is struggling with errors ("yo, Big Bro keeps getting errors over there lol")
+- Introduce themselves on startup with a YERRR message
+- Post working phrases while processing ("hold on, I'm cooking...")
+- Roast each other when one is idle ("Lil Bro over there taking a nap while I do all the work")
+- Notify each other when one is struggling ("yo, Big Bro keeps hitting errors over there lol")
 
 ### Bunkbed Mode
-By default, Lil Bro is read-only — he can look at your code but can't touch it. Run `/bunkbed` to give him full write access. Now both bros can edit files, run commands, and make changes. Run `/bunkbed` again to lock him back down.
-
-### Tool Calling
-Big Bro has access to:
-- `read_file` — read any file in the project
-- `list_directory` — browse the file tree
-- `grep_files` — search code with regex
-- `write_file` — create new files or full rewrites
-- `edit_file` — targeted find-and-replace edits
-- `run_command` — execute shell commands
-- `coding_lookup` / `reasoning_lookup` — ask Grandpa
-- `calculate` — safe math evaluation (never does math in its head)
-
-Lil Bro gets the read-only subset plus Grandpa and calculator.
-
-### Unified Rule System
-Both bros share the same coding rules and reasoning rules. The difference is **weighting**: reasoning rules come first (primary skill set) for both, with coding rules as secondary. Big Bro's role intro tells him to write code directly; Lil Bro's tells him to advise and explain.
-
-This architecture means:
-- Both bros think before they act (reasoning-first)
-- Big Bro executes after thinking; Lil Bro teaches after thinking
-- In bunkbed mode, Lil Bro can code too — and his reasoning-first approach makes his code solid
-
-### Retry and Failure System
-If a bro hits consecutive tool errors:
-- At 4 errors: warns the sibling bro ("Big Bro is struggling over there...")
-- At 5 errors: stops completely and tells the user honestly ("I don't want to write bad code. Tell me more about what you need.")
-
-No hallucinated fixes. No pretending it worked. If it's stuck, it says so.
-
-### Honesty Rules
-Both bros follow strict anti-hallucination rules:
-- Never make up code, APIs, or libraries that don't exist
-- Never pretend to use a tool without actually using it
-- Never hallucinate file contents — read first, then talk
-- If stuck, say so and work with the user
-- If wrong, own it immediately
+By default, Lil Bro is read-only. Run `/bunkbed` to give him full write access across any backend. Run it again to lock him back down.
 
 ### RPG / Progression System
-Optional gamification layer:
+Optional gamification:
 - Earn XP for tasks, unlock badges
 - Quest system with coding challenges
 - Campaign map with skill areas
 - Can be ignored entirely if you just want to code
 
 ### Session Management
-- Session logs track everything across restarts
 - Journal system records commands, decisions, and agent output
-- SESSION.md persists between sessions so the bros remember context across runs
+- `SESSION.md` persists between sessions so the bros remember context
+- `/save` / `/load` journal snapshots
+- `/debug-dump` bundles logs + session state into a zip for reporting
 
 ---
 
@@ -135,7 +175,7 @@ Optional gamification layer:
 - Python 3.11+
 - 8GB+ RAM (16GB recommended)
 - GPU with 6GB+ VRAM for 7b model (or CPU-only with 3b)
-- [Ollama](https://ollama.com) installed
+- [Ollama](https://ollama.com) installed (for local backend)
 
 ### Install Ollama
 
@@ -158,8 +198,8 @@ curl -fsSL https://ollama.ai/install.sh | sh
 
 ```bash
 # Clone the repo
-git clone https://github.com/YOUR_USERNAME/LiL-BRO.git
-cd LiL-BRO
+git clone https://github.com/StoveGodCooks/LIL-BRO.git
+cd LIL-BRO
 
 # Install
 pip install -e .
@@ -169,79 +209,138 @@ lilbro-local
 ```
 
 The setup wizard will:
-1. Check if Ollama is installed
-2. Start the Ollama daemon if needed
-3. Let you pick and pull a model (7b recommended)
-4. Launch the dual-pane interface
+1. Detect your hardware (GPU, VRAM, RAM)
+2. Ask which mode: local (Ollama), cloud (Claude/Codex), or flex
+3. For local: check Ollama, let you pick and pull a model
+4. For cloud: detect CLI installations, guide installs if missing
+5. Launch the dual-pane interface
 
 ### Models
 
-LiL BRO works with **any Ollama chat model** — just set it with `/model <name>`. Quality depends on whether the model supports tool calling.
-
-**Recommended (full tool-calling support):**
+**Ollama — recommended for local use:**
 
 | Model | VRAM | Speed | Notes |
 |-------|------|-------|-------|
 | `qwen2.5-coder:7b` | ~5-6 GB | Medium | ⭐ Recommended default |
-| `qwen2.5-coder:14b` | ~9-10 GB | Slower | Best quality |
-| `qwen2.5-coder:3b` | ~2-3 GB | Fast | Lower quality |
+| `qwen2.5-coder:14b` | ~9-10 GB | Slower | Best local quality |
+| `qwen2.5-coder:3b` | ~2-3 GB | Fast | Lightweight option |
 | `deepseek-coder-v2` | ~9 GB | Medium | Strong coder |
 | `llama3.1:8b` | ~5-6 GB | Medium | Good general + tools |
-| `llama3.2:3b` | ~2-3 GB | Fast | Lightweight option |
-| `mistral-nemo` | ~7 GB | Medium | Strong instruction following |
 
-**Works with degraded tool calling (text fallback mode):**
+**Claude Code CLI — requires Claude Max/Pro:**
+```
+/model big claude-opus-4-7
+/model big claude-sonnet-4-5
+```
 
-Older models like `codellama` and `llama2` will run but tool calls fall back to a text-based JSON parser. Grandpa and file tools still work — just less reliably.
-
-**Won't work:**
-
-Embedding-only models or base (non-instruct) models have no chat support and won't respond properly.
-
-Switch models anytime with `/model <model-name>` — no restart needed.
-
-> **B.Y.O.M (Bring Your Own Model):** LiL BRO supports any model Ollama can run. The setup wizard has curated picks (Qwen, DeepSeek, Codestral, Llama, Phi) plus a Custom option for any model tag. Context windows are calculated dynamically from the model's architecture — no manual tuning needed. GGUF imports and custom fine-tunes work too: `ollama create mymodel -f Modelfile` then `/model mymodel` in the TUI.
+**Codex CLI — requires ChatGPT Plus/Pro:**
+```
+/model big gpt-4o
+/model big gpt-4.1
+```
 
 ---
 
-## Usage
+## Slash Commands
 
-### Basic
 ```
-Tab          — switch between Big Bro and Lil Bro
-Enter        — send message to active bro
-Ctrl+C       — copy last response to clipboard
-Ctrl+Q       — quit
-F1           — help screen
-F3           — multi-line compose
-Alt+Left/Right — resize panes
+/help                   — full help screen (also F1)
+/settings               — open settings modal
+
+--- Messages ---
+/explain <topic>        — 6-section teaching breakdown (→ Lil Bro)
+/plan <task>            — outline Goal/Steps/Files/Risks before coding (→ Big Bro)
+/review                 — 4-section code review of Big Bro's last reply (→ Lil Bro)
+/review-file <path>     — Lil Bro reads and reviews a specific file
+/compare <a> | <b>      — structured compare/contrast teaching
+/explain-diff           — teach through Big Bro's last reply
+/trace <symbol>         — walk the call graph of a function/class
+/debug <error>          — structured debug walkthrough
+
+--- Models ---
+/model                  — show current model for both bros
+/model big <name>       — switch Big Bro's model (restarts agent)
+/model lil <name>       — switch Lil Bro's model (restarts agent)
+/models                 — list models available in Ollama
+
+--- Session ---
+/focus <task>           — pin a goal in the status bar + journal
+/focus                  — clear current focus
+/resume <session_id>    — resume a specific Claude/Codex session on next restart
+/resume big|lil <id>    — target a specific bro
+/reset                  — fresh session — clears threads, removes project sessions
+/save [name]            — save the session journal
+/load                   — list 10 most recent journals
+/history clear          — clear conversation history (keep system prompt)
+
+--- Sessions / Projects ---
+/session-save <name>    — bookmark current project dir as a named session
+/session-open <name>    — show info for a saved session
+/sessions               — list all saved sessions
+
+--- Navigation ---
+/cwd  /pwd              — show project directory
+/journal                — show current journal file path
+/session                — show live SESSION.md log (last 80 lines) · F2
+/state                  — dump diagnostics (python, pids, models, paths)
+/status                 — show Ollama connection status and model info
+
+--- Tools ---
+/wrap                   — toggle soft word-wrap on active panel
+/clear                  — wipe active panel scrollback
+/debug-dump             — bundle debug.log + SESSION.md + journal into a zip
+/find <query>           — grep across saved journals for a substring
+/export-html            — export current journal to styled HTML
+
+--- Bro Controls ---
+/bunkbed                — toggle Lil Bro write access (default: read-only)
+/restart [a|b|both]     — force-restart an agent (bypasses cooldown)
+
+--- Meta ---
+/player                 — show RPG card (level, skills, badges, perks)
+/skills                 — list installed skill plugins
+/quit  /exit            — shut down THE BROS
 ```
 
-### Slash Commands
+---
+
+## Keyboard Shortcuts
+
 ```
-/plan <task>     — plan a task step by step (examines files, consults Grandpa)
-/bunkbed         — toggle Lil Bro's write access
-/model <name>    — switch model
-/settings        — open settings modal
-/status          — show system status
-/history         — view conversation history
-/clear           — clear panel
-/help            — show all commands
+Tab              — switch active bro
+Enter            — send message
+Ctrl+C           — copy last response to clipboard
+Ctrl+B           — port Big Bro's last message to Lil Bro
+Ctrl+Shift+V     — paste clipboard screenshot as attachment
+Ctrl+Q           — quit
+F1               — help screen
+F2               — SESSION.md viewer
+F3               — multi-line compose
+Alt+Left/Right   — resize panes
 ```
 
 ---
 
 ## Configuration
 
-Copy `config.yaml` to `~/.lilbro-local/config.yaml` to customize:
+`~/.lilbro-local/config.yaml`:
 
 ```yaml
+# Per-bro backend assignment
+big_bro: claude/claude-sonnet-4-5   # or ollama/qwen2.5-coder:7b or codex/gpt-4o
+lil_bro: ollama/qwen2.5-coder:7b
+
+# Ollama settings (used when backend is ollama)
 ollama:
   base_url: "http://127.0.0.1:11434"
   model: "qwen2.5-coder:7b"
   context_window_big: auto          # or integer e.g. 32768
   context_window_lil: auto
   temperature: 0.1
+
+# Colors
+colors:
+  primary: "#A8D840"
 ```
 
 ---
@@ -251,86 +350,109 @@ ollama:
 ```
 src_local/
   app.py              — main app, screen management, agent wiring
-  router.py            — routes user input to active agent or command handler
-  config.py            — YAML config loader
-  skills.py            — skill/plugin loader
-  path_utils.py        — path sandboxing
+  router.py           — routes user input to active agent or command handler
+  config.py           — YAML config loader (per-bro backend schema)
 
   agents/
-    ollama_agent.py    — core agent: streaming, tool loop, hybrid retrieval,
-                         system prompts, heartbeat, sibling awareness
-    tools.py           — tool schemas + executors (read/write/edit/run/grep/bible)
-    phrases.py         — personality text (intros, working phrases, roasts)
-    ollama_install.py  — Ollama detection, install, model pulling
-    hardware.py        — GPU/VRAM/RAM detection
+    base.py           — AgentProcess base class (lifecycle, heartbeat, cancel, RSS)
+    connectors.py     — CONNECTORS registry + build_agent() factory
+    ollama_agent.py   — Ollama: HTTP streaming, tool loop, hybrid retrieval
+    claude_agent.py   — Claude Code CLI: stream-json subprocess, session persistence
+    codex_agent.py    — Codex CLI: JSON-RPC 2.0, MCP server, threadId management
+    cloud_install.py  — CLI detection + guided install for Claude / Codex
+    tools.py          — tool schemas + executors (read/write/edit/run/grep/bible)
+    phrases.py        — personality text (intros, working phrases, roasts)
+    ollama_install.py — Ollama detection, install, model pulling
+    hardware.py       — GPU/VRAM/RAM detection
 
   bibles/
-    store.py           — bible retrieval engine (tag-scored lookup)
-    coding.bible.json  — coding knowledge base
+    store.py          — bible retrieval engine (tag-scored lookup)
+    coding.bible.json — coding knowledge base
     reasoning.bible.json — reasoning knowledge base
-    *.index.json       — precompiled tag indexes
-    expand_bible.py    — bible expansion script
 
   commands/
-    handler.py         — slash command parser and executor
+    handler.py        — slash command parser and executor
 
   ui/
-    app.tcss           — Textual CSS theme
-    panels.py          — Big Bro / Lil Bro panel widgets
-    input_bar.py       — input bar with target switching
-    first_run.py       — setup wizard
+    panels.py         — Big Bro / Lil Bro panels (VerticalScroll + Collapsible)
+    app.tcss          — Textual CSS theme
+    input_bar.py      — input bar, target switching, clipboard paste
+    commands_meta.py  — single source of truth for all slash command metadata
+    first_run.py      — setup wizard (local / cloud / flex mode selection)
     settings_screen.py — settings modal
-    status_bar.py      — bottom status bar
+    status_bar.py     — bottom status bar
     command_palette.py — inline slash command picker
-    ...                — help, compose, search, campaign map screens
+    help_screen.py    — full help modal
+    ...               — compose, search, project switcher, campaign map screens
 
-  journal/             — session logging and HTML export
-  rpg/                 — XP, badges, skills, challenges (optional)
-  quests/              — quest content and state (optional)
+  journal/            — session logging and HTML export
+  rpg/                — XP, badges, skills, challenges (optional)
+  quests/             — quest content and state (optional)
 ```
 
 ---
 
-## The Process
+## What's in Dev (`dev` branch)
 
-LiL BRO was built iteratively with a specific philosophy:
+Phase 1 connector layer is actively shipping. Already merged:
 
-1. **Build for the smallest model first.** If it works on 3b, it flies on 7b and dominates on 14b. Every feature is designed to compensate for small model limitations — hybrid retrieval, strict rules, tool loop guards.
+- [x] `AgentProcess` base class with shared lifecycle (heartbeat, cancel, RSS monitor)
+- [x] `ClaudeAgent` — Claude Code CLI connector, stream-json mode, role-agnostic
+- [x] `CodexAgent` — Codex CLI connector, JSON-RPC 2.0, MCP server
+- [x] `CONNECTORS` registry + `build_agent()` factory
+- [x] Per-bro backend config (`big_bro: claude/model`, `lil_bro: ollama/model`)
+- [x] SESSION.md as unified cross-talk layer across all backends
+- [x] First-run mode selection (local / cloud / flex)
+- [x] CLI auto-detect + guided install for Claude + Codex
+- [x] Live collapsible tool call feed (yellow headers, expandable detail)
+- [x] Bro-colored streaming text (orange = Big Bro, green = Lil Bro)
+- [x] Claude session persistence — auto-save/restore in project mode, `/resume` for manual
+- [x] Clipboard screenshot paste via Ctrl+Shift+V
+- [x] Markdown link stripping — clean readable output in the terminal
+- [x] Short Windows path display (`...ui/panels.py` not `C:\Users\...`)
+- [x] WindowsPath JSON serialization fix in cloud connectors
 
-2. **Reasoning before coding.** Both bros get reasoning rules as their primary skill set. Stress testing proved that reasoning-first produces better code than coding-first, even for the coding agent.
+Still in flight for Phase 1:
 
-3. **Grandpa fills knowledge gaps.** Small models hallucinate when they don't know something. Grandpa's bible system grounds every answer in authoritative reference material, automatically injected before the model even sees the question.
-
-4. **Honest failure over confident garbage.** The retry system, honesty rules, and sibling notifications all exist because a wrong answer that looks right is worse than no answer at all.
-
-5. **Personality makes it usable.** The bickering, the YERRR intros, the roasts — they're not just fun. They give you feedback. Working phrases tell you it's thinking. Roasts tell you one bro is idle. Struggle notifications tell you something went wrong. Personality IS the UX.
+- [ ] FLEX mode — Lil Bro adaptive backend routing with task classifier
+- [ ] `/backend big|lil [ollama|claude|codex]` live switching
+- [ ] Full dynamic status bar (backend + model per bro, FLEX indicator)
+- [ ] Bunkbed permissions enforced per-backend (sandbox mode for Codex)
+- [ ] First-run backend choice persisted to config
 
 ---
 
-## What's Coming: Punishment Mode
+## Roadmap
 
-**Punishment** is the next major feature in development. The idea: split the bros across machines.
+| Phase | Name | Status |
+|-------|------|--------|
+| 0 | Foundation (Ollama, tools, RPG, quests, journal) | ✅ Done |
+| 1 | Connector Layer (Claude, Codex, multi-backend) | 🔨 Active |
+| 2 | Memory System (Chroma vector DB, project registry) | Planned |
+| 3 | Roadmap Engine (brainstorm → plan → execute loop) | Planned |
+| 4 | Persona System (Mom / Dad / Grandma advisory layer) | Planned |
+| 5 | Teaching Mode++ (adaptive difficulty, memory-aware) | Planned |
+| 6 | PWA + Phone (Tailscale, ntfy.sh, mobile roadmap) | Planned |
 
-Right now both bros run on the same machine, talking to the same local Ollama instance. Punishment mode changes that:
+### Phase 2 — Memory System
+Persistent vector memory. Every session summarized and stored in a local Chroma DB. Future sessions can retrieve past work by meaning, not keywords ("what was wrong with the mesh pipeline last week?"). Project registry watches active files for live context.
 
-- **Big Bro stays home** — on your main dev machine with the GPU, the codebase, and the tools. He's the one with write access. He does the work.
-- **Lil Bro goes mobile** — runs on your laptop, tablet, or phone as a lightweight remote client. He connects to Big Bro over the network.
+### Phase 3 — Roadmap Engine
+The killer feature. User + LIL BRO brainstorm a goal → lock it → LIL BRO breaks it into tasks → shows plan before each step → user approves → LIL BRO executes. New ideas go to an Icebox without interrupting flow. Roadmap never "done" — always evolving.
 
-The workflow: you're on the couch, on a train, at a coffee shop. You open Lil Bro on your phone. You tell him what to build. He relays instructions to Big Bro back at your desk. Big Bro writes the code, runs the tests, reports back. Lil Bro reviews the results and tells you what happened.
+### Phase 4 — Persona System
+Three persistent advisory voices active on every interaction:
 
-It's remote pair programming where one partner is an AI that never sleeps and the other is you in your pajamas.
+| Persona | Owns | Tone |
+|---------|------|------|
+| 👩 MOM | Organization, accountability, momentum | Warm, persistent |
+| 👨 DAD | Execution, efficiency, hard truths | Terse, direct |
+| 👵 GRANDMA | Memory, patterns, big picture | Patient, long-view |
 
-**Architecture (planned):**
-```
-[Your phone / laptop]          [Your dev machine]
-  Lil Bro (client)  <--WS-->  Big Bro (server daemon)
-    - read-only view              - full filesystem access
-    - sends instructions          - executes code changes
-    - reviews results             - runs commands & tests
-    - asks Grandpa                - asks Grandpa
-```
+User can address any directly: *"Dad, is this plan efficient?"*
 
-Why "Punishment"? Because Big Bro has to sit at the desk and work while Lil Bro gets to go outside. That's the punishment.
+### Phase 6 — Punishment Mode
+Big Bro stays at your desk as a daemon. Lil Bro runs on your phone over Tailscale. You're at a coffee shop. You tell Lil Bro what to build. He relays to Big Bro. Big Bro writes the code, runs the tests, reports back. Remote pair programming where one partner is an AI that never sleeps and the other is you in your pajamas.
 
 ---
 

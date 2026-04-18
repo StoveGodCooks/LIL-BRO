@@ -9,7 +9,7 @@ Local-first personal AI OS. Model-agnostic. Gets smarter the longer you use it.
 | Phase | Name | Status |
 |---|---|---|
 | 0 | Foundation | ✅ DONE |
-| 1 | Connector Layer | 🔨 NEXT |
+| 1 | Connector Layer | 🔨 IN PROGRESS |
 | 2 | Memory System | Planned |
 | 3 | Roadmap Engine | Planned |
 | 4 | Persona System | Planned |
@@ -63,7 +63,7 @@ Everything already built and in daily use.
 
 ---
 
-## 🔨 Phase 1 — Connector Layer (NEXT)
+## 🔨 Phase 1 — Connector Layer (IN PROGRESS)
 
 Pluggable backend architecture. Each bro gets its own backend. Keeps Ollama as default, adds Claude Code CLI and Codex CLI via user subscriptions. No API keys.
 
@@ -133,16 +133,24 @@ Lil Bro" at the connector layer.
 - [ ] Falls back to Ollama if preferred backend unavailable
 
 ### Permissions
-- [ ] Lil Bro read-only on all backends by default
-- [ ] `/bunkbed` unlocks Lil Bro write access regardless of backend
-- [ ] Codex: enforced via `sandbox_mode="read-only"` on spawn
-- [ ] Claude: enforced via system prompt constraint
+- [x] Lil Bro read-only on all backends by default
+- [x] `/bunkbed` unlocks Lil Bro write access regardless of backend
+- [ ] Codex: enforce via `sandbox_mode="read-only"` on spawn *(Claude already enforces via permission-mode=plan)*
+
+### UI changes shipped alongside connectors
+- [x] Live collapsible tool call feed — yellow headers, expand for Read/Edit/Bash/Write detail
+- [x] Bro-colored streaming text — orange for Big Bro, green for Lil Bro
+- [x] Claude session persistence — auto-save/restore in project mode; `/resume` for manual
+- [x] `/reset` clears both agents + deletes project session files
+- [x] Clipboard screenshot paste — Ctrl+Shift+V, no manual file save required
+- [x] Markdown link stripping — `[label](url)` → `label` for clean terminal output
+- [x] Short path display — `...ui/panels.py` not `C:\Users\...`
+- [x] Auto-scroll only when already at bottom (no forced pinning mid-read)
 
 ### Setup flow (first_run.py extension)
-- [ ] Step: "Choose Big Bro backend" — ollama (default) or cloud
-- [ ] Step: "Choose Lil Bro backend" — ollama, cloud, or FLEX
-- [ ] If cloud chosen: detect CLI, guided install if missing, confirm auth
-- [ ] Choice persisted to config
+- [x] Mode selection: local (Ollama) / cloud (Claude/Codex) / flex
+- [x] Cloud path: detect CLI, guided install if missing
+- [ ] Choice persisted to config (first-run result written back to config.yaml)
 
 ### Live switching
 - [ ] `/backend big [ollama|claude|codex]` — swap Big Bro backend mid-session
