@@ -5,10 +5,9 @@ Pushed on F1 / Ctrl+H / `/help`. Dismiss with Esc / F1 / Q.
 
 from __future__ import annotations
 
-from rich.text import Text
 from textual.app import ComposeResult
 from textual.binding import Binding
-from textual.containers import Container, Horizontal, Vertical, VerticalScroll
+from textual.containers import Container, Horizontal, VerticalScroll
 from textual.screen import ModalScreen
 from textual.widgets import Static
 

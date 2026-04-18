@@ -166,7 +166,6 @@ def _build_tool_detail(name: str, path: str, inp: dict) -> str:
 
     if name == "MultiEdit":
         import difflib
-        from pathlib import PureWindowsPath, PurePosixPath
         parts = []
         for edit in (inp.get("edits") or []):
             if not isinstance(edit, dict):

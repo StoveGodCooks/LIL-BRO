@@ -7,10 +7,6 @@ that /resume correctly routes a session ID to the right bro using the
 
 from __future__ import annotations
 
-from typing import Any
-
-import pytest
-
 from src_local.commands.handler import CommandHandler
 
 
