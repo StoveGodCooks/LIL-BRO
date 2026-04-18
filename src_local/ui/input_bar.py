@@ -17,6 +17,7 @@ palette itself is passive -- it only filters, selects, and renders.
 
 from __future__ import annotations
 
+import datetime
 import json
 import logging
 from pathlib import Path
@@ -320,6 +321,12 @@ class InputBar(Vertical):
         palette_open = self._palette is not None and self._palette.visible
         key = event.key
 
+        if key == "ctrl+shift+v":
+            if self._paste_clipboard_image():
+                event.stop()
+                event.prevent_default()
+            return
+
         if palette_open:
             if key == "up":
                 self._palette.move_selection(-1)  # type: ignore[union-attr]
@@ -389,6 +396,81 @@ class InputBar(Vertical):
         except Exception:  # noqa: BLE001
             pass
         self._hide_palette()
+
+    # -----------------------------------------------------------------
+    # Clipboard screenshot paste (Ctrl+Shift+V)
+    # -----------------------------------------------------------------
+
+    def _paste_clipboard_image(self) -> bool:
+        """Grab an image from the clipboard, save it, and inject the path.
+
+        Returns True if an image was pasted. Requires Pillow; on other
+        platforms ``ImageGrab.grabclipboard`` returns None when no image
+        is present and we silently fall through.
+        """
+        try:
+            from PIL import ImageGrab
+        except ImportError:
+            self._notify_panel(
+                "(clipboard image paste needs Pillow -- pip install pillow)"
+            )
+            return False
+
+        try:
+            img = ImageGrab.grabclipboard()
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("clipboard grab failed: %s", exc)
+            return False
+
+        # On Windows, a file copied in Explorer comes back as a list of
+        # paths; bare screenshots come back as a PIL.Image.
+        if isinstance(img, list):
+            if not img:
+                return False
+            path = Path(str(img[0])).expanduser()
+            if not path.is_file():
+                return False
+            self._inject_attachment(path)
+            return True
+
+        if img is None:
+            self._notify_panel("(no image on clipboard -- press PrtScn first)")
+            return False
+
+        tmp_dir = Path.home() / ".lilbro-local" / "tmp"
+        tmp_dir.mkdir(parents=True, exist_ok=True)
+        stamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        out_path = tmp_dir / f"screenshot_{stamp}.png"
+        try:
+            img.save(out_path, "PNG")
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("screenshot save failed: %s", exc)
+            self._notify_panel(f"(screenshot save failed: {exc})")
+            return False
+        self._inject_attachment(out_path)
+        return True
+
+    def _inject_attachment(self, path: Path) -> None:
+        """Insert ``[attached: <path>] `` into the input field at the cursor."""
+        field = self.query_one("#input-field", Input)
+        marker = f"[attached: {path}] "
+        existing = field.value or ""
+        field.value = (existing + marker) if existing else marker
+        try:
+            field.cursor_position = len(field.value)
+        except Exception:  # noqa: BLE001
+            pass
+        self._notify_panel(f"(attached screenshot -> {path.name})")
+
+    def _notify_panel(self, msg: str) -> None:
+        target = self._router.active_target
+        panel = (
+            self._router.big_bro_panel if target == "big" else self._router.lil_bro_panel
+        )
+        try:
+            panel.append_system(msg)
+        except Exception:  # noqa: BLE001
+            pass
 
     # -----------------------------------------------------------------
     # Command history (persisted to ~/.lilbro-local/history.json)

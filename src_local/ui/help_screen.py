@@ -8,7 +8,7 @@ from __future__ import annotations
 from rich.text import Text
 from textual.app import ComposeResult
 from textual.binding import Binding
-from textual.containers import Container, VerticalScroll
+from textual.containers import Container, Horizontal, Vertical, VerticalScroll
 from textual.screen import ModalScreen
 from textual.widgets import Static
 
@@ -37,6 +37,7 @@ HOTKEYS: list[tuple[str, str]] = [
     ("F1 / Ctrl+H",      "Open this help screen"),
     ("F2",               "Show SESSION.md live log in the active panel  /  same as /session"),
     ("F3",               "Open the multi-line compose modal (paste/edit large prompts)"),
+    ("Ctrl+Shift+V",     "Paste clipboard screenshot -- auto-saves to ~/.lilbro-local/tmp/ and attaches path"),
     ("Esc",              "Close help/palette  /  Clear draft  /  Cancel in-flight turn"),
     ("Ctrl+N",           "Open NotesPad scratchpad  /  Ctrl+S inside saves to ~/.lilbro-local/notes.md"),
     ("Ctrl+P",           "Quick project switcher -- jump to a recent project directory"),
@@ -46,54 +47,23 @@ HOTKEYS: list[tuple[str, str]] = [
     ("Down (in input)",  "Walk forward through history (restores unsent draft at end)"),
 ]
 
-# COMMANDS is imported from src_local.ui.commands_meta -- single source of truth
-# shared with the inline command palette.
-
 AGENT_ROLES = [
     ("Big Bro (Coder)",      "#E8A838",     "Writes and edits code. Full workspace access."),
     ("Lil Bro (Helper)",     "#A8D840",     "Read-only helper for debugging, explaining, and reviewing."),
 ]
 
-
-# -----------------------------------------------------------------------------
-# Helpers to format tables with aligned columns
-# -----------------------------------------------------------------------------
-
-def _fmt_hotkey_table() -> Text:
-    """Two-column hotkey table: KEY | description."""
-    key_width = max(len(k) for k, _ in HOTKEYS) + 2
-    t = Text()
-    for key, desc in HOTKEYS:
-        t.append(key.ljust(key_width), style="bold #E8A838")
-        t.append("  ")
-        t.append(desc, style="#E8E8E8")
-        t.append("\n")
-    return t
+# Fixed column widths (chars). Description gets the rest via 1fr.
+_CMD_W = max(len(c) for c, _, _ in COMMANDS) + 1   # e.g. 21
+_TGT_W = max(len(t) for _, t, _ in COMMANDS) + 2   # e.g. 12
+_KEY_W = max(len(k) for k, _ in HOTKEYS) + 2        # e.g. 18
 
 
-def _fmt_command_table() -> Text:
-    """Three-column command table: /cmd | target | description."""
-    cmd_width = max(len(c) for c, _, _ in COMMANDS) + 2
-    tgt_width = max(len(t) for _, t, _ in COMMANDS) + 2
-    t = Text()
-    for cmd, target, desc in COMMANDS:
-        t.append(cmd.ljust(cmd_width), style="bold #A8D840")
-        color = "#E8A838" if "Big Bro" in target else "#A8D840" if "Lil Bro" in target else "#666666"
-        t.append(target.ljust(tgt_width), style=color)
-        t.append("  ")
-        t.append(desc, style="#E8E8E8")
-        t.append("\n")
-    return t
-
-
-def _fmt_roles_table() -> Text:
-    t = Text()
-    for name, color, desc in AGENT_ROLES:
-        t.append(f"  {name}", style=f"bold {color}")
-        t.append("\n    ")
-        t.append(desc, style="#CCCCCC")
-        t.append("\n")
-    return t
+def _tgt_color(target: str) -> str:
+    if "Big Bro" in target:
+        return "#E8A838"
+    if "Lil Bro" in target:
+        return "#A8D840"
+    return "#666666"
 
 
 # -----------------------------------------------------------------------------
@@ -103,46 +73,79 @@ def _fmt_roles_table() -> Text:
 class HelpScreen(ModalScreen):
     """Floating help modal. Pops over the dual-pane screen."""
 
-    DEFAULT_CSS = """
-    HelpScreen {
+    DEFAULT_CSS = f"""
+    HelpScreen {{
         align: center middle;
-    }
-    #help-container {
+    }}
+    #help-container {{
         width: 90;
         height: 85%;
         border: round #3A3A3A;
         padding: 1 2;
         background: #1A1A1A;
-    }
-    #help-title {
+    }}
+    #help-title {{
         width: 100%;
         content-align: center middle;
         color: #A8D840;
         text-style: bold;
         margin-bottom: 0;
-    }
-    #help-subtitle {
+    }}
+    #help-subtitle {{
         width: 100%;
         content-align: center middle;
         color: #888888;
         margin-bottom: 1;
-    }
-    .help-section-header {
+    }}
+    .help-section-header {{
         color: #E8A838;
         text-style: bold;
         margin-top: 1;
         margin-bottom: 0;
-    }
-    .help-table {
-        margin-bottom: 1;
+        padding-left: 1;
+    }}
+    /* ── row layout ─────────────────────────────── */
+    .help-row {{
+        height: auto;
         padding: 0 1;
-    }
-    #help-footer {
+    }}
+    .help-cmd {{
+        width: {_CMD_W};
+        color: #A8D840;
+        text-style: bold;
+    }}
+    .help-tgt {{
+        width: {_TGT_W};
+    }}
+    .help-desc {{
+        width: 1fr;
+        color: #E8E8E8;
+    }}
+    .help-key {{
+        width: {_KEY_W};
+        color: #E8A838;
+        text-style: bold;
+    }}
+    /* ── role block ─────────────────────────────── */
+    .role-row {{
+        height: auto;
+        padding: 0 1;
+        margin-bottom: 1;
+    }}
+    .role-name {{
+        width: 22;
+        text-style: bold;
+    }}
+    .role-desc {{
+        width: 1fr;
+        color: #CCCCCC;
+    }}
+    #help-footer {{
         width: 100%;
         content-align: center middle;
         color: #888888;
         dock: bottom;
-    }
+    }}
     """
 
     BINDINGS = [
@@ -155,14 +158,37 @@ class HelpScreen(ModalScreen):
     def compose(self) -> ComposeResult:
         with Container(id="help-container"):
             yield Static("THE BROS -- HELP", id="help-title")
-            yield Static("local-model coding TUI -- powered by Ollama", id="help-subtitle")
+            yield Static(
+                "model-agnostic coding TUI -- Ollama / Claude / Codex",
+                id="help-subtitle",
+            )
             with VerticalScroll():
                 yield Static("AGENTS", classes="help-section-header")
-                yield Static(_fmt_roles_table(), classes="help-table")
+                for name, color, desc in AGENT_ROLES:
+                    name_widget = Static(name, markup=False,
+                                         classes="role-name")
+                    name_widget.styles.color = color
+                    with Horizontal(classes="role-row"):
+                        yield name_widget
+                        yield Static(desc, classes="role-desc",
+                                     markup=False)
+
                 yield Static("KEYBOARD SHORTCUTS", classes="help-section-header")
-                yield Static(_fmt_hotkey_table(), classes="help-table")
+                for key, desc in HOTKEYS:
+                    with Horizontal(classes="help-row"):
+                        yield Static(key, classes="help-key", markup=False)
+                        yield Static(desc, classes="help-desc", markup=False)
+
                 yield Static("SLASH COMMANDS", classes="help-section-header")
-                yield Static(_fmt_command_table(), classes="help-table")
+                for cmd, target, desc in COMMANDS:
+                    tgt_widget = Static(target, markup=False,
+                                        classes="help-tgt")
+                    tgt_widget.styles.color = _tgt_color(target)
+                    with Horizontal(classes="help-row"):
+                        yield Static(cmd, classes="help-cmd", markup=False)
+                        yield tgt_widget
+                        yield Static(desc, classes="help-desc", markup=False)
+
             yield Static("[Esc / F1 / Q to close]", id="help-footer")
 
     def action_close(self) -> None:

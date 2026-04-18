@@ -66,8 +66,8 @@ Grandpa uses **hybrid retrieval**:
 
 This means even if the model writes a bad search query, the keyword pre-scan catches relevant entries. And even if keywords miss the right entry, the model's semantic understanding fills the gap.
 
-### Shared Workspace Log (BROS_LOG)
-Both bros write summaries of what they're working on to a shared log file. Each bro can see what the other has been doing — it gets injected into their context automatically. This is passive cross-talk: they don't message each other directly, but they're aware of each other's work.
+### Shared Workspace Log (SESSION.md)
+Every backend — Ollama, Claude, and Codex — reads and writes the same `SESSION.md` file at the project root. LIL BRO streams append-only breadcrumbs into a `## Live Stream` section as work happens: user prompts, agent replies, tool calls, file edits, errors. Each pane can see what the other has been doing — it gets injected into their context automatically. This is passive cross-talk: they don't message each other directly, but they're aware of each other's work across all three backends.
 
 ### Bro Bickering
 The bros have personality. They:
@@ -125,7 +125,7 @@ Optional gamification layer:
 ### Session Management
 - Session logs track everything across restarts
 - Journal system records commands, decisions, and agent output
-- BROS_LOG persists between sessions so the bros remember context
+- SESSION.md persists between sessions so the bros remember context across runs
 
 ---
 

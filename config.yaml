@@ -1,9 +1,48 @@
 # LIL BRO LOCAL — default config
 # Copy to ~/.lilbro-local/config.yaml to customize.
 
+# ---------------------------------------------------------------------------
+# Per-bro backend assignment (Phase 1)
+# ---------------------------------------------------------------------------
+# Each bro picks its own backend. Three providers ship today:
+#
+#   ollama   — local models via the Ollama daemon (default, always available)
+#   claude   — Anthropic's `claude` CLI, auth via Claude Max / Pro subscription
+#   codex    — OpenAI's `codex mcp-server`, auth via ChatGPT Plus / Pro
+#   flex     — (lil_bro only) adaptive routing across whatever backends are
+#              available, falling back to `adaptive_fallback` when offline
+#
+# Two shapes are accepted. Pick whichever reads better to you.
+#
+#   Long form:
+#     big_bro:
+#       backend: claude
+#       model: sonnet-4
+#
+#   Shorthand:
+#     big_bro: claude/sonnet-4
+#
+# Leaving `model` unset (or omitting it entirely) falls back to the
+# provider's default. For `ollama`, that default comes from the `ollama:`
+# block below so existing Phase 0 configs keep working unchanged.
+
+big_bro:
+  backend: ollama                   # ollama | claude | codex
+  # model: qwen2.5-coder:7b         # optional; falls back to ollama.model
+  # context_window: auto            # "auto" detects from VRAM (ollama only)
+
+lil_bro:
+  backend: ollama                   # ollama | claude | codex | flex
+  # model: qwen2.5-coder:7b
+  # context_window: auto
+  # adaptive_fallback: ollama       # only when backend == "flex"
+
+# ---------------------------------------------------------------------------
+# Ollama daemon — shared settings used whenever a bro's backend is "ollama"
+# ---------------------------------------------------------------------------
 ollama:
   base_url: "http://127.0.0.1:11434"
-  model: "qwen2.5-coder:7b"        # any Ollama model — use /model to switch live
+  model: "qwen2.5-coder:7b"         # any Ollama model — use /model to switch live
   context_window_big: auto          # or an integer like 32768
   context_window_lil: auto          # "auto" queries Ollama for the model's limit
   temperature: 0.1

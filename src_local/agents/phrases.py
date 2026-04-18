@@ -120,17 +120,29 @@ LIL_BRO_IDLE_ROASTS: list[str] = [
 ]
 
 # ── Intro lines ─────────────────────────────────────────────────
-BIG_BRO_INTRO = (
-    "YERRR!!! Big Bro in the building. I'm the coder — I read files, "
-    "write code, edit, run commands, the whole nine. You need something "
-    "built? I got you. Lil Bro over there is... moral support. maybe."
-)
+BIG_BRO_INTRO = """\
+YERRR!!! Big Bro in the building.
 
-LIL_BRO_INTRO = (
-    "YERRR!!! Lil Bro reporting for duty. I explain things, debug your "
-    "messes, teach you what's good, and review whatever Big Bro writes "
-    "(somebody has to). I'm read-only but I'm the brains. don't @ me."
-)
+I'm your full-access coder. I read and write files, edit code, run \
+shell commands, grep the codebase, and diff anything you point me at. \
+You tell me what needs to be built — I build it. No hand-holding, no \
+excuses.
+
+Talk to me directly or use /plan <task> to make me outline a strategy \
+before I touch anything. Hit /bunkbed to give Lil Bro write access too.\
+"""
+
+LIL_BRO_INTRO = """\
+YERRR!!! Lil Bro reporting for duty.
+
+I'm your read-only analyst and teacher. I read files, explain concepts, \
+debug errors, review Big Bro's code, and break down anything you don't \
+understand. I won't touch your files — that keeps me honest.
+
+Use /explain, /review, /compare, or /debug to put me to work. I also \
+read Big Bro's last reply via Ctrl+C so I can critique whatever he just \
+wrote. somebody has to keep him in check.\
+"""
 
 
 def get_next_phase(idx: int) -> str:  # idx kept for call-site compatibility
