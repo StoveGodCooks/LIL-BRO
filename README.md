@@ -16,14 +16,46 @@ They share a workspace, they know about each other's moves via a live `SESSION.m
 ![Status](https://img.shields.io/badge/status-beta-red)
 ![Python](https://img.shields.io/badge/python-3.11+-blue)
 ![License](https://img.shields.io/badge/license-PolyForm%20NC-blue)
-![Ollama](https://img.shields.io/badge/powered%20by-Ollama-orange)
-![Claude](https://img.shields.io/badge/powered%20by-Claude%20Code%20CLI-8B5CF6)
-![Codex](https://img.shields.io/badge/powered%20by-Codex%20CLI-10B981)
+![Ollama](https://img.shields.io/badge/Local%20Mode-Ollama-orange)
+![Claude](https://img.shields.io/badge/Cloud%20Mode-Claude%20Code%20CLI-8B5CF6)
+![Codex](https://img.shields.io/badge/Cloud%20Mode-Codex%20CLI-10B981)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey)
 
 > **LiL BRO is in beta.** Expect rough edges and the occasional bro meltdown. We're building in public and moving fast — feedback and bug reports welcome.
 
-> **Platform note:** LiL BRO runs on **Windows, macOS, and Linux**. Apple Silicon (M1/M2/M3/M4) is fully supported — Ollama runs natively on Metal and the bros will detect your unified memory automatically.
+> **Platform note:** LiL BRO runs on **Windows, macOS, and Linux**. Apple Silicon (M1/M2/M3/M4) is fully supported — Ollama runs natively on Metal and the bros detect your unified memory automatically.
+
+---
+
+## Two Modes
+
+### 🖥️ Local Mode — free, private, offline
+Run both bros on your own GPU using [Ollama](https://ollama.com). No accounts, no internet, no billing. Everything stays on your machine.
+
+```
+Big Bro: Ollama (qwen2.5-coder:7b)
+Lil Bro: Ollama (qwen2.5-coder:7b)
+```
+
+Recommended for: daily use, private codebases, offline environments, low-cost setups.
+
+### ☁️ Cloud Mode — use your existing Claude or Codex subscription
+Power the bros with Claude Code CLI or Codex CLI using your existing **Claude Max/Pro** or **ChatGPT Plus/Pro** subscription. No new API keys — LIL BRO drives the same CLI tools you already use.
+
+```
+Big Bro: Claude Code CLI  (claude-opus-4 or sonnet)
+Lil Bro: Codex CLI        (gpt-4o or gpt-4.1)
+```
+
+Or mix it:
+```
+Big Bro: Claude   ← heavy lifting, file edits, long context
+Lil Bro: Ollama   ← fast local explanations, no cost
+```
+
+Recommended for: complex codebases, long-context work, when local VRAM is limited.
+
+> **No new subscriptions required.** Cloud Mode works with the `claude` and `codex` CLI tools. If you already have Claude Max or ChatGPT Plus, you're set. LIL BRO wraps those CLIs — it doesn't call the API directly and doesn't add to your bill beyond your existing plan usage.
 
 ---
 
