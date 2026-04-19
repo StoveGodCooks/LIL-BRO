@@ -71,6 +71,17 @@ COMMANDS: list[tuple[str, str, str]] = [
     ("/memories [n]",           "--",          "List the n most recent memory entries (default 10)"),
     ("/forget <query>",         "--",          "Remove memories and preferences matching a query"),
     ("/prefs [n]",              "--",          "Show top observed preference patterns"),
+    ("/roadmap",                "--",          "Show the living roadmap (milestones + tasks)"),
+    ("/brainstorm <goal>",      "-> Lil Bro",  "Structured brainstorm toward a milestone"),
+    ("/milestone <title>",      "--",          "Lock a goal as a milestone (also: start/done/delete)"),
+    ("/plan-tasks <id>",        "-> Big Bro",  "Ask Big Bro to break a milestone into tasks"),
+    ("/task ...",               "--",          "/task list | add | start | done | block | delete"),
+    ("/execute [id]",           "-> Big Bro",  "Prep next BACKLOG task with scope brief"),
+    ("/icebox <idea>",          "--",          "Capture a mid-flight idea (also: list/drop/promote)"),
+    ("/mom <question>",         "-> Big Bro",  "Address the accountability/momentum persona"),
+    ("/dad <question>",         "-> Big Bro",  "Address the execution/efficiency persona"),
+    ("/grandma <question>",     "-> Lil Bro",  "Address the memory/big-picture persona"),
+    ("/persona [name|auto]",    "--",          "Show or set the active persona (mom|dad|grandma|auto)"),
     ("/quit  /exit",            "--",          "Shut down THE BROS"),
 ]
 

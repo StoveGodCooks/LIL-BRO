@@ -391,6 +391,8 @@ class CommandHandler:
         self.config = config
         self._bunkbed: bool = False
         self._backend_swapper: Callable | None = None
+        # Phase 4 -- active persona ("auto" = classifier chooses).
+        self.active_persona: str = "auto"
 
     # -----------------------------------------------------------------
     # RPG award helper
@@ -582,6 +584,32 @@ class CommandHandler:
 
         if cmd == "/prefs":
             return self._cmd_prefs(arg)
+
+        # Phase 3 -- roadmap engine
+        if cmd == "/roadmap":
+            return self._cmd_roadmap(arg)
+        if cmd == "/brainstorm":
+            return self._cmd_brainstorm(arg)
+        if cmd == "/milestone":
+            return self._cmd_milestone(arg)
+        if cmd == "/plan-tasks":
+            return self._cmd_plan_tasks(arg)
+        if cmd == "/task":
+            return self._cmd_task(arg)
+        if cmd == "/execute":
+            return self._cmd_execute(arg)
+        if cmd == "/icebox":
+            return self._cmd_icebox(arg)
+
+        # Phase 4 -- personas
+        if cmd == "/mom":
+            return self._cmd_persona_direct("mom", arg)
+        if cmd == "/dad":
+            return self._cmd_persona_direct("dad", arg)
+        if cmd == "/grandma":
+            return self._cmd_persona_direct("grandma", arg)
+        if cmd == "/persona":
+            return self._cmd_persona(arg)
 
         # Dynamic skill lookup -- /skill-name maps to ~/.lilbro-local/skills/skill_name.*
         skill_name = cmd.lstrip("/")
@@ -2000,6 +2028,327 @@ class CommandHandler:
                 bypass_agent=True,
                 message=f"preferences unavailable: {exc}",
             )
+
+    # -----------------------------------------------------------------
+    # Phase 3 -- roadmap engine
+    # -----------------------------------------------------------------
+
+    def _roadmap_path(self) -> Path:
+        return Path.home() / ".lilbro-local" / "roadmap.json"
+
+    def _icebox_path(self) -> Path:
+        return Path.home() / ".lilbro-local" / "icebox.json"
+
+    def _load_map(self):
+        from src_local.roadmap.living_map import LivingMap
+        return LivingMap(self._roadmap_path())
+
+    def _load_icebox(self):
+        from src_local.roadmap.icebox import Icebox
+        return Icebox(self._icebox_path())
+
+    def _cmd_roadmap(self, arg: str) -> CommandResult:
+        """/roadmap -- show the living roadmap."""
+        rm = self._load_map()
+        return CommandResult(
+            bypass_agent=True,
+            message="ROADMAP\n" + rm.render_summary(),
+        )
+
+    def _cmd_brainstorm(self, arg: str) -> CommandResult:
+        """/brainstorm <goal> -- kick off a brainstorm prompt to Lil Bro."""
+        from src_local.roadmap.brainstorm import build_brainstorm_prompt
+        prompt = build_brainstorm_prompt(arg)
+        # Route to Lil Bro for teaching-shaped thinking.
+        return CommandResult(
+            bypass_agent=False,
+            forced_target="bro",
+            rewritten_prompt=prompt,
+        )
+
+    def _cmd_milestone(self, arg: str) -> CommandResult:
+        """/milestone <title> -- lock a goal as a milestone (also: /milestone start <id>)."""
+        text = arg.strip()
+        if not text:
+            return CommandResult(
+                bypass_agent=True,
+                message=(
+                    "usage: /milestone <title>            -- create a milestone\n"
+                    "       /milestone start <id>         -- promote to IN_PROGRESS\n"
+                    "       /milestone done <id>          -- mark COMPLETED\n"
+                    "       /milestone delete <id>        -- remove"
+                ),
+            )
+        rm = self._load_map()
+        parts = text.split(None, 1)
+        verb = parts[0].lower()
+        if verb in {"start", "done", "delete"} and len(parts) == 2:
+            mid = parts[1].strip()
+            if verb == "delete":
+                ok = rm.delete_milestone(mid)
+                msg = f"milestone {mid} deleted" if ok else f"no milestone {mid}"
+                return CommandResult(bypass_agent=True, message=msg)
+            state = "IN_PROGRESS" if verb == "start" else "COMPLETED"
+            m = rm.set_milestone_state(mid, state)  # type: ignore[arg-type]
+            if m is None:
+                return CommandResult(
+                    bypass_agent=True, message=f"no milestone {mid}"
+                )
+            return CommandResult(
+                bypass_agent=True,
+                message=f"milestone {m.id} -> {m.state}: {m.title}",
+            )
+        m = rm.add_milestone(text)
+        return CommandResult(
+            bypass_agent=True,
+            message=(
+                f"milestone locked: {m.id} -- {m.title}\n"
+                f"next: /plan-tasks {m.id}  (or /milestone start {m.id})"
+            ),
+        )
+
+    def _cmd_plan_tasks(self, arg: str) -> CommandResult:
+        """/plan-tasks <milestone_id> -- ask Big Bro to break it into tasks."""
+        mid = arg.strip().split()[0] if arg.strip() else ""
+        rm = self._load_map()
+        if not mid:
+            # Default to the active milestone if one exists.
+            active = rm.active_milestone()
+            if active is None:
+                return CommandResult(
+                    bypass_agent=True,
+                    message="usage: /plan-tasks <milestone_id>",
+                )
+            mid = active.id
+        m = rm.find_milestone(mid)
+        if m is None:
+            return CommandResult(
+                bypass_agent=True, message=f"no milestone {mid}"
+            )
+        from src_local.roadmap.planner import build_plan_prompt
+        prompt = build_plan_prompt(m.title, extra_context=m.description)
+        # Route to Big Bro -- the planner / executor pane.
+        return CommandResult(
+            bypass_agent=False,
+            forced_target="big",
+            rewritten_prompt=prompt,
+        )
+
+    def _cmd_task(self, arg: str) -> CommandResult:
+        """/task list | /task add <milestone_id> <title> | /task <start|done|block|delete> <id>."""
+        text = arg.strip()
+        if not text or text == "list":
+            rm = self._load_map()
+            return CommandResult(bypass_agent=True, message=rm.render_summary())
+        parts = text.split(None, 2)
+        verb = parts[0].lower()
+        rm = self._load_map()
+        if verb == "add":
+            if len(parts) < 3:
+                return CommandResult(
+                    bypass_agent=True,
+                    message="usage: /task add <milestone_id> <title>",
+                )
+            mid = parts[1]
+            title = parts[2]
+            t = rm.add_task(mid, title)
+            if t is None:
+                return CommandResult(
+                    bypass_agent=True, message=f"no milestone {mid}"
+                )
+            return CommandResult(
+                bypass_agent=True,
+                message=f"task added: {t.id} under {mid} -- {t.title}",
+            )
+        if verb in {"start", "done", "block", "delete"}:
+            if len(parts) < 2:
+                return CommandResult(
+                    bypass_agent=True, message=f"usage: /task {verb} <task_id>"
+                )
+            tid = parts[1]
+            if verb == "delete":
+                ok = rm.delete_task(tid)
+                return CommandResult(
+                    bypass_agent=True,
+                    message=(
+                        f"task {tid} deleted" if ok else f"no task {tid}"
+                    ),
+                )
+            state_map = {
+                "start": "IN_PROGRESS",
+                "done": "COMPLETED",
+                "block": "BLOCKED",
+            }
+            t = rm.set_task_state(tid, state_map[verb])  # type: ignore[arg-type]
+            if t is None:
+                return CommandResult(
+                    bypass_agent=True, message=f"no task {tid}"
+                )
+            return CommandResult(
+                bypass_agent=True,
+                message=f"task {t.id} -> {t.state}: {t.title}",
+            )
+        return CommandResult(
+            bypass_agent=True,
+            message=(
+                "usage: /task list\n"
+                "       /task add <milestone_id> <title>\n"
+                "       /task <start|done|block|delete> <task_id>"
+            ),
+        )
+
+    def _cmd_execute(self, arg: str) -> CommandResult:
+        """/execute [milestone_id] -- prep next BACKLOG task + request plan from Big Bro."""
+        from src_local.roadmap.executor import Executor
+        rm = self._load_map()
+        ex = Executor(rm)
+        mid = arg.strip() or None
+        # If no mid supplied and nothing active, fall back to the first
+        # milestone that still has a BACKLOG task.
+        if mid is None and rm.active_milestone() is None:
+            for m in rm.milestones:
+                if any(t.state == "BACKLOG" for t in m.tasks):
+                    mid = m.id
+                    break
+        step = ex.prepare_next(mid)
+        if step is None:
+            return CommandResult(
+                bypass_agent=True,
+                message=(
+                    "nothing to execute -- create a milestone and tasks first "
+                    "(/milestone, /plan-tasks)"
+                ),
+            )
+        # Promote milestone to active if it isn't yet.
+        if step.milestone.state != "IN_PROGRESS":
+            rm.set_milestone_state(step.milestone.id, "IN_PROGRESS")
+        ex.start(step.task_id)
+        return CommandResult(
+            bypass_agent=False,
+            forced_target="big",
+            rewritten_prompt=step.brief_prompt,
+        )
+
+    def _cmd_icebox(self, arg: str) -> CommandResult:
+        """/icebox <idea> | /icebox list | /icebox drop <id> | /icebox promote <id> <milestone_id>."""
+        text = arg.strip()
+        box = self._load_icebox()
+        if not text:
+            return CommandResult(
+                bypass_agent=True,
+                message=(
+                    "usage: /icebox <idea>                    -- capture an idea\n"
+                    "       /icebox list                      -- show open items\n"
+                    "       /icebox drop <id>                 -- discard an item\n"
+                    "       /icebox promote <id> <milestone>  -- turn into a task"
+                ),
+            )
+        first = text.split(None, 1)[0].lower()
+        if first == "list":
+            items = box.list_open()
+            if not items:
+                return CommandResult(
+                    bypass_agent=True, message="icebox is empty"
+                )
+            lines = ["icebox:"]
+            for i in items:
+                lines.append(f"  {i.id}  {i.text[:100]}")
+            return CommandResult(bypass_agent=True, message="\n".join(lines))
+        if first == "drop":
+            parts = text.split(None, 1)
+            if len(parts) < 2:
+                return CommandResult(
+                    bypass_agent=True, message="usage: /icebox drop <id>"
+                )
+            ok = box.drop(parts[1].strip())
+            return CommandResult(
+                bypass_agent=True,
+                message=(
+                    f"icebox dropped {parts[1]}" if ok else f"no icebox item {parts[1]}"
+                ),
+            )
+        if first == "promote":
+            parts = text.split()
+            if len(parts) < 3:
+                return CommandResult(
+                    bypass_agent=True,
+                    message="usage: /icebox promote <id> <milestone_id>",
+                )
+            iid = parts[1]
+            mid = parts[2]
+            item = box.find(iid)
+            if item is None:
+                return CommandResult(
+                    bypass_agent=True, message=f"no icebox item {iid}"
+                )
+            rm = self._load_map()
+            t = rm.add_task(mid, item.text)
+            if t is None:
+                return CommandResult(
+                    bypass_agent=True, message=f"no milestone {mid}"
+                )
+            box.promote(iid, t.id)
+            return CommandResult(
+                bypass_agent=True,
+                message=f"promoted {iid} -> task {t.id} under {mid}",
+            )
+        # Default: capture.
+        item = box.add(text)
+        return CommandResult(
+            bypass_agent=True, message=f"iceboxed {item.id}: {item.text[:80]}"
+        )
+
+    # -----------------------------------------------------------------
+    # Phase 4 -- personas
+    # -----------------------------------------------------------------
+
+    def _cmd_persona(self, arg: str) -> CommandResult:
+        """/persona [mom|dad|grandma|auto] -- set or show active persona."""
+        from src_local import personas
+        text = arg.strip().lower()
+        if not text:
+            return CommandResult(
+                bypass_agent=True,
+                message=f"active persona: {self.active_persona}",
+            )
+        if text == "auto":
+            self.active_persona = "auto"
+            return CommandResult(
+                bypass_agent=True,
+                message="persona: auto (classifier will pick per prompt)",
+            )
+        if personas.get(text) is None:
+            return CommandResult(
+                bypass_agent=True,
+                message="usage: /persona [mom|dad|grandma|auto]",
+            )
+        self.active_persona = text
+        return CommandResult(
+            bypass_agent=True, message=f"persona set: {text}"
+        )
+
+    def _cmd_persona_direct(self, name: str, arg: str) -> CommandResult:
+        """/mom|/dad|/grandma <question> -- address a persona directly."""
+        from src_local import personas
+        p = personas.get(name)
+        if p is None:
+            return CommandResult(
+                bypass_agent=True, message=f"unknown persona: {name}"
+            )
+        question = (arg or "").strip()
+        if not question:
+            return CommandResult(
+                bypass_agent=True,
+                message=f"usage: /{name} <question for {name}>",
+            )
+        rewritten = f"{p.system_prefix}\n\nUser asks:\n{question}"
+        # Grandma -> Lil Bro (teaching/memory); Mom + Dad -> Big Bro (execution).
+        target: Target = "bro" if name == "grandma" else "big"
+        return CommandResult(
+            bypass_agent=False,
+            forced_target=target,  # type: ignore[arg-type]
+            rewritten_prompt=rewritten,
+        )
 
     # -----------------------------------------------------------------
     # HTML export
