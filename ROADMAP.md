@@ -11,8 +11,8 @@ Local-first personal AI OS. Model-agnostic. Gets smarter the longer you use it.
 | 0 | Foundation | ✅ DONE |
 | 1 | Connector Layer | ✅ DONE |
 | 2 | Memory System | ✅ DONE |
-| 3 | Roadmap Engine | Planned |
-| 4 | Persona System | Planned |
+| 3 | Roadmap Engine | ✅ DONE |
+| 4 | Persona System | ✅ DONE |
 | 5 | Teaching Mode++ | Planned |
 | 6 | PWA + Phone | Planned |
 
@@ -202,18 +202,27 @@ Persistent vector memory. Accumulates knowledge about you, your projects, and yo
 
 ---
 
-## Phase 3 — Roadmap Engine
+## ✅ Phase 3 — Roadmap Engine (DONE)
 
 The killer feature. Transforms LIL BRO from a chat tool into an autonomous project executor.
 
 **Depends on:** Phases 1 + 2
 
 ### New: `src_local/roadmap/`
-- [ ] `brainstorm.py` — guided brainstorm session with all three personas active
-- [ ] `planner.py` — break goals into features and tasks
-- [ ] `executor.py` — autonomous task execution loop with user gates
-- [ ] `living_map.py` — living roadmap data structure
-- [ ] `icebox.py` — capture ideas mid-execution without breaking flow
+- [x] `living_map.py` — milestones + tasks + states, JSON persisted at `~/.lilbro-local/roadmap.json`
+- [x] `icebox.py` — append-only idea capture with promote/drop lifecycle
+- [x] `brainstorm.py` — structured 6-section brainstorm prompt builder
+- [x] `planner.py` — milestone → tasks prompt + bullet-list parser
+- [x] `executor.py` — task-by-task walker with user-approval briefings (not autonomous)
+
+### Commands
+- [x] `/roadmap` — render the living roadmap
+- [x] `/brainstorm <goal>` — structured brainstorm routed to Lil Bro
+- [x] `/milestone <title>` / `start <id>` / `done <id>` / `delete <id>`
+- [x] `/plan-tasks <milestone_id>` — Big Bro breaks milestone into tasks
+- [x] `/task list | add <mid> <title> | start | done | block | delete`
+- [x] `/execute [milestone_id]` — prep next BACKLOG task with scope brief
+- [x] `/icebox <idea> | list | drop <id> | promote <id> <milestone>`
 
 ### Workflow
 ```
@@ -238,7 +247,7 @@ BRAINSTORM → GOAL LOCK → PLAN → EXECUTE → LIVING ROADMAP
 
 ---
 
-## Phase 4 — Persona System
+## ✅ Phase 4 — Persona System (DONE)
 
 Three concurrent advisory voices. Not modes — persistent lenses on every interaction.
 
@@ -252,11 +261,12 @@ Three concurrent advisory voices. Not modes — persistent lenses on every inter
 | 👨 DAD | Execution, efficiency, hard truths | Terse, direct | Task execution, scope creep, tech calls |
 | 👵 GRANDMA | Memory, patterns, big picture | Patient, long-view | Brainstorm, big decisions, repeated mistakes |
 
-- All three evaluate every context — dominant one surfaces
-- User can address any directly: *"Dad, is this plan efficient?"*
-- Grandma auto-leads in Teaching Mode
-- Mom monitors the Roadmap
-- Dad drives execution
+- [x] Keyword classifier scores every prompt; dominant persona surfaces
+- [x] User can address any directly: `/mom`, `/dad`, `/grandma`
+- [x] `/persona [mom|dad|grandma|auto]` — lock dominant persona
+- [x] Teaching mode forces Grandma
+- [x] Roadmap-drift signal forces Mom
+- [x] Default bias is Dad (execution)
 
 ---
 
