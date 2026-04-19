@@ -1,0 +1,17 @@
+{
+  "name": "LIL BRO LOCAL",
+  "short_name": "LIL BRO",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#1a1a1a",
+  "theme_color": "#1a1a1a",
+  "description": "Local-first personal AI OS — roadmap, memory, and prefs in your pocket.",
+  "icons": [
+    {
+      "src": "/static/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

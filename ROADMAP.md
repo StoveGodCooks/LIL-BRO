@@ -13,8 +13,8 @@ Local-first personal AI OS. Model-agnostic. Gets smarter the longer you use it.
 | 2 | Memory System | ✅ DONE |
 | 3 | Roadmap Engine | ✅ DONE |
 | 4 | Persona System | ✅ DONE |
-| 5 | Teaching Mode++ | Planned |
-| 6 | PWA + Phone | Planned |
+| 5 | Teaching Mode++ | ✅ DONE |
+| 6 | PWA + Phone | ✅ DONE |
 
 ---
 
@@ -270,32 +270,42 @@ Three concurrent advisory voices. Not modes — persistent lenses on every inter
 
 ---
 
-## Phase 5 — Teaching Mode++
+## ✅ Phase 5 — Teaching Mode++ (DONE)
 
 Adaptive difficulty wired to the connector layer and memory.
 
 **Depends on:** Phases 1 + 2 + 4
 
-- [ ] Adaptive difficulty using memory (knows what you've already learned)
-- [ ] Connector-aware lesson delivery (best model for explanations)
-- [ ] Grandma persona auto-activates in teach mode
-- [ ] Quest XP reflects connector usage
-- [ ] Character sheet surfaceable from any screen
+### New: `src_local/teaching/`
+- [x] `adaptive.py` — `DifficultyEngine` scores topic familiarity from PreferenceLog + MemoryStore + skill levels, emits novice/intermediate/advanced tier
+- [x] `delivery.py` — backend router prefers Claude > Codex > Ollama for concepts, honors user-pinned backend, always falls back to Ollama offline
+- [x] `character_sheet.py` — compact level/XP/skills/badges render
+
+### Commands
+- [x] `/sheet` — surface the character sheet from any screen
+- [x] `/lesson <topic>` — adaptive lesson, connector-aware, Grandma-prefixed
 
 ---
 
-## Phase 6 — PWA + Phone
+## ✅ Phase 6 — PWA + Phone (DONE)
 
 Mobile browser access over Tailscale. No App Store.
 
 **Depends on:** Phase 3
 
 ### New: `src_local/pwa/`
-- [ ] Progressive Web App served over existing Tailscale connection
-- [ ] Installable to home screen
-- [ ] Push notifications via ntfy.sh
-- [ ] Mobile-optimized roadmap view
-- [ ] No cloud server required — runs over local network
+- [x] Stdlib `http.server` in a background thread — zero extra deps
+- [x] Single-page PWA (index + css + js) — mobile-optimized roadmap/memories/prefs/icebox views
+- [x] Service worker for offline shell, network-first for `/api/*`
+- [x] Manifest + icon — installable to home screen
+- [x] JSON endpoints: `/api/roadmap`, `/api/memories`, `/api/prefs`, `/api/icebox`, `/api/health`
+- [x] `notify.py` — ntfy.sh wrapper (topic from `notify.topic` in config.yaml or `$LILBRO_NTFY_TOPIC`)
+
+### Commands
+- [x] `/pwa start [port]` — start the server (default 8765)
+- [x] `/pwa stop` — stop cleanly
+- [x] `/pwa url` — show the current URL
+- [x] `/notify <message>` — push to configured ntfy topic
 
 ---
 
