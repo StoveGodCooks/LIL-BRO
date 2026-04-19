@@ -122,7 +122,7 @@ When a bro is working, every tool call appears as a **collapsible yellow entry**
 
 No more guessing what the model is doing. Watch it happen.
 
-### Multi-Backend Support (Phase 1)
+### Multi-Backend Support
 Each bro runs its own backend independently. Mix and match:
 
 ```
@@ -130,29 +130,65 @@ Big Bro: Claude Code CLI  →  writes code, runs tests, edits files
 Lil Bro: Ollama local     →  explains logic, reviews diffs, teaches
 ```
 
-Or go all-local:
+### Memory System
+LIL BRO remembers. Everything accumulates into a local vector store (Chroma, optional) and a preference log:
+
+- Past sessions are summarized and stored on shutdown
+- `/recall <query>` does semantic search over everything you've ever worked on
+- `/prefs` surfaces your coding patterns ("you always reach for dataclasses here")
+- Memory gets injected into prompts automatically when relevant
+
+### Living Roadmap
+The killer feature. LIL BRO doesn't just answer questions — it helps you ship:
 
 ```
-Big Bro: Ollama (qwen2.5-coder:14b)
-Lil Bro: Ollama (qwen2.5-coder:7b)
+BRAINSTORM → GOAL LOCK → PLAN → EXECUTE → ROADMAP
 ```
 
-Or all-cloud during deep work sessions:
+1. `/brainstorm <goal>` — structured 6-section breakdown with Lil Bro
+2. `/milestone <title>` — lock the goal as a milestone
+3. `/plan-tasks <mid>` — Big Bro breaks it into concrete tasks
+4. `/execute` — walks task by task, shows scope brief before each, you approve
+5. `/icebox <idea>` — capture ideas mid-flow without breaking momentum
 
-```
-Big Bro: Claude (opus-4)
-Lil Bro: Codex (gpt-4o)
-```
+Roadmap persists at `~/.lilbro-local/roadmap.json` and is always live.
+
+### Persona System
+Three advisory voices active on every interaction — not modes, persistent lenses:
+
+| Persona | Owns | Tone | Activates when |
+|---------|------|------|----------------|
+| 👩 MOM | Organization, accountability, momentum | Warm, persistent | Planning, roadmap drift, long sessions |
+| 👨 DAD | Execution, efficiency, hard truths | Terse, direct | Task execution, scope creep, tech calls |
+| 👵 GRANDMA | Memory, patterns, big picture | Patient, long-view | Brainstorm, teaching, repeated mistakes |
+
+Address them directly: `/mom`, `/dad`, `/grandma` — or lock one with `/persona`.
+
+### Adaptive Teaching Mode
+`/lesson <topic>` doesn't give everyone the same explanation. The difficulty engine scores your familiarity from:
+- Preference log events (learned / used signals)
+- Memory store hits
+- Skill level from your RPG profile
+
+Then routes to the best available backend (Claude > Codex > Ollama) and delivers a structured lesson at the right level. Grandma's voice is always prefixed.
+
+### Character Sheet
+`/sheet` surfaces your RPG profile anywhere — level, XP, skills sorted by level, badges earned.
+
+### PWA — Phone Access
+`/pwa start` spins up a local web server. Open `http://<tailscale-ip>:8765/` on your phone to get a mobile-optimized view of your roadmap, memories, preferences, and icebox — all auto-refreshing. Install to home screen for a native-app feel. Uses stdlib only, zero extra deps.
+
+Push notifications via ntfy.sh: `/notify <message>` sends to your phone instantly, no account required.
 
 ### Session Continuity (Claude / Codex)
-Claude and Codex backends maintain persistent session context across the life of the subprocess. Every connection prints a short session tag like `[abc12345]`. If you restart and want to continue that thread:
+Claude and Codex backends maintain persistent session context. Every connection prints a short session tag like `[abc12345]`. Resume with:
 
 ```
 /resume abc12345         — resumes in Big Bro on next /restart
 /resume lil cafe5678     — resumes in Lil Bro
 ```
 
-Working in a registered project? Session is auto-saved and auto-resumed on next launch. Start completely fresh anytime with `/reset`.
+Working in a registered project? Session is auto-saved and auto-resumed on next launch. Start fresh anytime with `/reset`.
 
 ### Grandpa (Knowledge Base)
 Both bros have access to **Grandpa** — a local knowledge base with two bibles:
@@ -160,44 +196,27 @@ Both bros have access to **Grandpa** — a local knowledge base with two bibles:
 - **Coding Bible** — API docs, syntax references, stdlib patterns, code examples
 - **Reasoning Bible** — debugging strategies, algorithm analysis, design tradeoffs
 
-Grandpa uses **hybrid retrieval**:
-1. **Pre-scan** — keywords from your query matched against bible entry tags
-2. **Model pull** — the model calls `coding_lookup` / `reasoning_lookup` tools with a smarter inferred query
-3. **Merge** — results merged with confidence scoring; entries both retrievers agree on shown first
+Grandpa uses **hybrid retrieval**: keyword pre-scan + model lookup, merged with confidence scoring.
 
-> Grandpa is Ollama-only. Claude and Codex backends already carry that knowledge — they don't need it injected.
+> Grandpa is Ollama-only. Claude and Codex backends already carry that knowledge.
 
 ### Shared Workspace Log (SESSION.md)
-Every backend reads and writes the same `SESSION.md` at your project root. LIL BRO streams append-only breadcrumbs as work happens — user prompts, agent replies, tool calls, file edits. Each bro can see what the other is doing across all backends, passively, without direct messaging.
+Every backend reads and writes the same `SESSION.md` at your project root. Append-only breadcrumbs — user prompts, agent replies, tool calls, file edits. Each bro can see what the other is doing across all backends, passively.
 
 ### Clipboard Screenshot Paste
-Press **Ctrl+Shift+V** to paste a screenshot directly from your clipboard. LIL BRO saves it to `~/.lilbro-local/tmp/` and injects the file path into your input bar — no manual file saving required. Attach UI screenshots, error dialogs, or reference images to your messages.
+**Ctrl+Shift+V** pastes a screenshot directly from your clipboard. No manual file saving.
 
 ### BYOM — Bring Your Own Model
-LiL BRO supports any model Ollama can run. The first-run wizard has curated picks (Qwen Coder, DeepSeek, Codestral, Llama, Phi) plus a Custom option. Context windows are calculated dynamically from the model's architecture — no manual tuning needed. GGUF imports and custom fine-tunes work too: `ollama create mymodel -f Modelfile`, then `/model mymodel`.
+Any model Ollama can run works. Context windows calculated dynamically from architecture. GGUF imports and custom fine-tunes supported.
 
 ### Bro Bickering
-The bros have personality. They:
-- Introduce themselves on startup with a YERRR message
-- Post working phrases while processing ("hold on, I'm cooking...")
-- Roast each other when one is idle ("Lil Bro over there taking a nap while I do all the work")
-- Notify each other when one is struggling ("yo, Big Bro keeps hitting errors over there lol")
+The bros have personality — YERRR intros, working phrases, roasts when the other is idle, notifications when one is struggling.
 
 ### Bunkbed Mode
-By default, Lil Bro is read-only. Run `/bunkbed` to give him full write access across any backend. Run it again to lock him back down.
+Lil Bro is read-only by default. `/bunkbed` gives him full write access. Run again to lock back down.
 
 ### RPG / Progression System
-Optional gamification:
-- Earn XP for tasks, unlock badges
-- Quest system with coding challenges
-- Campaign map with skill areas
-- Can be ignored entirely if you just want to code
-
-### Session Management
-- Journal system records commands, decisions, and agent output
-- `SESSION.md` persists between sessions so the bros remember context
-- `/save` / `/load` journal snapshots
-- `/debug-dump` bundles logs + session state into a zip for reporting
+Optional gamification: XP, badges, quest system, campaign map with skill areas. Can be ignored entirely.
 
 ---
 
@@ -310,6 +329,47 @@ The setup wizard will:
 /session-open <name>    — show info for a saved session
 /sessions               — list all saved sessions
 
+--- Memory ---
+/remember <note>        — store a manual memory entry
+/recall <query>         — semantic search over past memories
+/memories [n]           — list n most recent memory entries
+/forget <query>         — delete memories and preferences matching query
+/prefs [n]              — show top observed preference patterns
+
+--- Roadmap ---
+/roadmap                — render the living roadmap
+/brainstorm <goal>      — structured 6-section brainstorm (→ Lil Bro)
+/milestone <title>      — add a new milestone
+/milestone start <id>   — set milestone IN_PROGRESS
+/milestone done <id>    — mark milestone COMPLETED
+/milestone delete <id>  — remove a milestone
+/plan-tasks <mid>       — Big Bro breaks milestone into tasks
+/task list              — list all tasks
+/task add <mid> <title> — add a task to a milestone
+/task start             — mark next task IN_PROGRESS
+/task done              — mark active task COMPLETED
+/task block             — mark active task BLOCKED
+/task delete <id>       — remove a task
+/execute [mid]          — prep next BACKLOG task with scope brief
+/icebox <idea>          — capture idea without interrupting flow
+/icebox list            — list open icebox items
+/icebox drop <id>       — drop an icebox item
+/icebox promote <id> <mid> — promote idea to a milestone as a task
+
+--- Personas ---
+/mom                    — address Mom directly (organization, momentum)
+/dad                    — address Dad directly (execution, efficiency)
+/grandma                — address Grandma directly (memory, big picture)
+/persona [mom|dad|grandma|auto] — lock or reset dominant persona
+/sheet                  — show character sheet (level, XP, skills, badges)
+/lesson <topic>         — adaptive lesson routed to best backend
+
+--- PWA / Phone ---
+/pwa start [port]       — start phone web server (default 8765)
+/pwa stop               — stop the server
+/pwa url                — show the current URL
+/notify <message>       — push notification via ntfy.sh
+
 --- Navigation ---
 /cwd  /pwd              — show project directory
 /journal                — show current journal file path
@@ -370,6 +430,10 @@ ollama:
   context_window_lil: auto
   temperature: 0.1
 
+# Push notifications (ntfy.sh — no account required)
+notify:
+  topic: your-unique-topic-here     # or set $LILBRO_NTFY_TOPIC env var
+
 # Colors
 colors:
   primary: "#A8D840"
@@ -384,6 +448,7 @@ src_local/
   app.py              — main app, screen management, agent wiring
   router.py           — routes user input to active agent or command handler
   config.py           — YAML config loader (per-bro backend schema)
+  personas.py         — Mom / Dad / Grandma classifier and persona system
 
   agents/
     base.py           — AgentProcess base class (lifecycle, heartbeat, cancel, RSS)
@@ -405,6 +470,30 @@ src_local/
   commands/
     handler.py        — slash command parser and executor
 
+  memory/
+    chroma_store.py   — local Chroma vector DB wrapper (optional dep, graceful no-op)
+    preference_log.py — preference event log (JSON, capped at 2000 events)
+    project_registry.py — register and track projects
+    session_summarizer.py — summarize sessions via local model
+    context_injector.py — inject relevant memory into prompts
+
+  roadmap/
+    living_map.py     — milestones + tasks + states, JSON persisted
+    icebox.py         — append-only idea capture with promote/drop lifecycle
+    brainstorm.py     — structured 6-section brainstorm prompt builder
+    planner.py        — milestone → tasks prompt + bullet-list parser
+    executor.py       — task-by-task walker with user-approval briefings
+
+  teaching/
+    adaptive.py       — DifficultyEngine: scores topic familiarity, emits tier
+    delivery.py       — backend router + lesson prompt builder
+    character_sheet.py — compact level/XP/skills/badges renderer
+
+  pwa/
+    server.py         — stdlib HTTPServer in daemon thread, JSON API endpoints
+    notify.py         — ntfy.sh push notification wrapper
+    static/           — index.html, style.css, app.js, manifest, service-worker
+
   ui/
     panels.py         — Big Bro / Lil Bro panels (VerticalScroll + Collapsible)
     app.tcss          — Textual CSS theme
@@ -424,67 +513,17 @@ src_local/
 
 ---
 
-## What's in Dev (`dev` branch)
-
-Phase 1 connector layer is actively shipping. Already merged:
-
-- [x] `AgentProcess` base class with shared lifecycle (heartbeat, cancel, RSS monitor)
-- [x] `ClaudeAgent` — Claude Code CLI connector, stream-json mode, role-agnostic
-- [x] `CodexAgent` — Codex CLI connector, JSON-RPC 2.0, MCP server
-- [x] `CONNECTORS` registry + `build_agent()` factory
-- [x] Per-bro backend config (`big_bro: claude/model`, `lil_bro: ollama/model`)
-- [x] SESSION.md as unified cross-talk layer across all backends
-- [x] First-run mode selection (local / cloud / flex)
-- [x] CLI auto-detect + guided install for Claude + Codex
-- [x] Live collapsible tool call feed (yellow headers, expandable detail)
-- [x] Bro-colored streaming text (orange = Big Bro, green = Lil Bro)
-- [x] Claude session persistence — auto-save/restore in project mode, `/resume` for manual
-- [x] Clipboard screenshot paste via Ctrl+Shift+V
-- [x] Markdown link stripping — clean readable output in the terminal
-- [x] Short Windows path display (`...ui/panels.py` not `C:\Users\...`)
-- [x] WindowsPath JSON serialization fix in cloud connectors
-
-Still in flight for Phase 1:
-
-- [ ] FLEX mode — Lil Bro adaptive backend routing with task classifier
-- [ ] `/backend big|lil [ollama|claude|codex]` live switching
-- [ ] Full dynamic status bar (backend + model per bro, FLEX indicator)
-- [ ] Bunkbed permissions enforced per-backend (sandbox mode for Codex)
-- [ ] First-run backend choice persisted to config
-
----
-
 ## Roadmap
 
 | Phase | Name | Status |
 |-------|------|--------|
 | 0 | Foundation (Ollama, tools, RPG, quests, journal) | ✅ Done |
-| 1 | Connector Layer (Claude, Codex, multi-backend) | 🔨 Active |
-| 2 | Memory System (Chroma vector DB, project registry) | Planned |
-| 3 | Roadmap Engine (brainstorm → plan → execute loop) | Planned |
-| 4 | Persona System (Mom / Dad / Grandma advisory layer) | Planned |
-| 5 | Teaching Mode++ (adaptive difficulty, memory-aware) | Planned |
-| 6 | PWA + Phone (Tailscale, ntfy.sh, mobile roadmap) | Planned |
-
-### Phase 2 — Memory System
-Persistent vector memory. Every session summarized and stored in a local Chroma DB. Future sessions can retrieve past work by meaning, not keywords ("what was wrong with the mesh pipeline last week?"). Project registry watches active files for live context.
-
-### Phase 3 — Roadmap Engine
-The killer feature. User + LIL BRO brainstorm a goal → lock it → LIL BRO breaks it into tasks → shows plan before each step → user approves → LIL BRO executes. New ideas go to an Icebox without interrupting flow. Roadmap never "done" — always evolving.
-
-### Phase 4 — Persona System
-Three persistent advisory voices active on every interaction:
-
-| Persona | Owns | Tone |
-|---------|------|------|
-| 👩 MOM | Organization, accountability, momentum | Warm, persistent |
-| 👨 DAD | Execution, efficiency, hard truths | Terse, direct |
-| 👵 GRANDMA | Memory, patterns, big picture | Patient, long-view |
-
-User can address any directly: *"Dad, is this plan efficient?"*
-
-### Phase 6 — Punishment Mode
-Big Bro stays at your desk as a daemon. Lil Bro runs on your phone over Tailscale. You're at a coffee shop. You tell Lil Bro what to build. He relays to Big Bro. Big Bro writes the code, runs the tests, reports back. Remote pair programming where one partner is an AI that never sleeps and the other is you in your pajamas.
+| 1 | Connector Layer (Claude, Codex, multi-backend, FLEX) | ✅ Done |
+| 2 | Memory System (vector DB, preference log, /recall) | ✅ Done |
+| 3 | Roadmap Engine (brainstorm → plan → execute loop) | ✅ Done |
+| 4 | Persona System (Mom / Dad / Grandma advisory layer) | ✅ Done |
+| 5 | Teaching Mode++ (adaptive difficulty, memory-aware) | ✅ Done |
+| 6 | PWA + Phone (Tailscale, ntfy.sh, mobile roadmap) | ✅ Done |
 
 ---
 
