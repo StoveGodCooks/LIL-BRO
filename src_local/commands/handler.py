@@ -574,6 +574,15 @@ class CommandHandler:
         if cmd == "/recall":
             return self._cmd_recall(arg)
 
+        if cmd == "/memories":
+            return self._cmd_memories(arg)
+
+        if cmd == "/forget":
+            return self._cmd_forget(arg)
+
+        if cmd == "/prefs":
+            return self._cmd_prefs(arg)
+
         # Dynamic skill lookup -- /skill-name maps to ~/.lilbro-local/skills/skill_name.*
         skill_name = cmd.lstrip("/")
         skill_path = find_skill(skill_name)
@@ -1891,6 +1900,105 @@ class CommandHandler:
             return CommandResult(
                 bypass_agent=True,
                 message=f"memory unavailable: {exc}",
+            )
+
+    def _cmd_memories(self, arg: str) -> CommandResult:
+        """/memories [n] -- list the most recent memory entries."""
+        try:
+            limit = int(arg.strip()) if arg.strip() else 10
+        except ValueError:
+            limit = 10
+        limit = max(1, min(limit, 50))
+        try:
+            from src_local.memory.chroma_store import MemoryStore
+            store_dir = Path.home() / ".lilbro-local" / "memory"
+            store = MemoryStore(store_dir)
+            entries = store.recent(n=limit) if hasattr(store, "recent") else []
+            if not entries:
+                return CommandResult(
+                    bypass_agent=True,
+                    message="no memories stored yet (try /remember <note>)",
+                )
+            import datetime as _dt
+            lines = [f"last {len(entries)} memories:"]
+            for i, r in enumerate(entries, 1):
+                ts = r.get("metadata", {}).get("timestamp")
+                when = (
+                    _dt.datetime.fromtimestamp(float(ts)).strftime("%Y-%m-%d %H:%M")
+                    if ts else "?"
+                )
+                text = r.get("text", "")
+                lines.append(f"  {i}. [{when}] {text[:120]}")
+            return CommandResult(bypass_agent=True, message="\n".join(lines))
+        except Exception as exc:  # noqa: BLE001
+            return CommandResult(
+                bypass_agent=True,
+                message=f"memory unavailable: {exc}",
+            )
+
+    def _cmd_forget(self, arg: str) -> CommandResult:
+        """/forget <query> -- remove memories and preferences matching query."""
+        query = arg.strip()
+        if not query:
+            return CommandResult(
+                bypass_agent=True,
+                message="usage: /forget <query>  (removes matching memories/preferences)",
+            )
+        removed_mem = 0
+        removed_prefs = 0
+        try:
+            from src_local.memory.chroma_store import MemoryStore
+            store_dir = Path.home() / ".lilbro-local" / "memory"
+            store = MemoryStore(store_dir)
+            if hasattr(store, "forget"):
+                removed_mem = int(store.forget(query) or 0)
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            from src_local.memory.preference_log import PreferenceLog
+            prefs = PreferenceLog(
+                Path.home() / ".lilbro-local" / "preferences.json"
+            )
+            removed_prefs = prefs.forget(query)
+        except Exception:  # noqa: BLE001
+            pass
+        return CommandResult(
+            bypass_agent=True,
+            message=(
+                f"forgot {removed_mem} memory entr{'y' if removed_mem == 1 else 'ies'} "
+                f"and {removed_prefs} preference{'' if removed_prefs == 1 else 's'} "
+                f"matching '{query}'"
+            ),
+        )
+
+    def _cmd_prefs(self, arg: str) -> CommandResult:
+        """/prefs [n] -- show top preference patterns observed over time."""
+        try:
+            limit = int(arg.strip()) if arg.strip() else 5
+        except ValueError:
+            limit = 5
+        limit = max(1, min(limit, 20))
+        try:
+            from src_local.memory.preference_log import PreferenceLog
+            prefs = PreferenceLog(
+                Path.home() / ".lilbro-local" / "preferences.json"
+            )
+            top = prefs.top_patterns(n=limit)
+            if not top:
+                return CommandResult(
+                    bypass_agent=True,
+                    message="no preference patterns logged yet",
+                )
+            lines = [f"top {len(top)} preference patterns:"]
+            for i, p in enumerate(top, 1):
+                lines.append(
+                    f"  {i}. {p['type']} = {p['value']}  (x{p['count']})"
+                )
+            return CommandResult(bypass_agent=True, message="\n".join(lines))
+        except Exception as exc:  # noqa: BLE001
+            return CommandResult(
+                bypass_agent=True,
+                message=f"preferences unavailable: {exc}",
             )
 
     # -----------------------------------------------------------------

@@ -68,6 +68,9 @@ COMMANDS: list[tuple[str, str, str]] = [
     ("/flex",                   "Lil Bro",     "Toggle Lil Bro FLEX mode — routes each turn to the best backend"),
     ("/remember <note>",        "--",          "Store a manual memory entry (requires chromadb)"),
     ("/recall <query>",         "--",          "Semantic search over saved memories"),
+    ("/memories [n]",           "--",          "List the n most recent memory entries (default 10)"),
+    ("/forget <query>",         "--",          "Remove memories and preferences matching a query"),
+    ("/prefs [n]",              "--",          "Show top observed preference patterns"),
     ("/quit  /exit",            "--",          "Shut down THE BROS"),
 ]
 

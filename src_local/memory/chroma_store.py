@@ -149,6 +149,67 @@ class MemoryStore:
             r for r in results if r.get("metadata", {}).get("type") == "session"
         ][:n]
 
+    # ------------------------------------------------------------------
+    # Listing + forgetting
+    # ------------------------------------------------------------------
+
+    def recent(self, n: int = 10) -> list[dict]:
+        """Return the *n* most recently added memories (by timestamp metadata).
+
+        Falls back to insertion order when timestamps are absent.
+        """
+        if not _available or self._collection is None:
+            _warn_unavailable()
+            return []
+        try:
+            data = self._collection.get()
+            docs = data.get("documents") or []
+            metas = data.get("metadatas") or []
+            ids = data.get("ids") or []
+            items = [
+                {"text": d, "metadata": m or {}, "id": i}
+                for d, m, i in zip(docs, metas, ids)
+            ]
+
+            def _ts(entry: dict) -> float:
+                try:
+                    return float(entry.get("metadata", {}).get("timestamp") or 0)
+                except (TypeError, ValueError):
+                    return 0.0
+
+            items.sort(key=_ts, reverse=True)
+            return items[:n]
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("MemoryStore.recent failed: %s", exc)
+            return []
+
+    def forget(self, query: str) -> int:
+        """Delete memories whose text contains *query* (case-insensitive).
+
+        Returns number of entries removed. No-op when chromadb is unavailable.
+        """
+        if not _available or self._collection is None:
+            _warn_unavailable()
+            return 0
+        if not query:
+            return 0
+        try:
+            data = self._collection.get()
+            docs = data.get("documents") or []
+            ids = data.get("ids") or []
+            needle = query.lower()
+            to_delete = [
+                i for i, d in zip(ids, docs)
+                if d and needle in str(d).lower()
+            ]
+            if not to_delete:
+                return 0
+            self._collection.delete(ids=to_delete)
+            return len(to_delete)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("MemoryStore.forget failed: %s", exc)
+            return 0
+
 
 # ------------------------------------------------------------------
 # Internal helpers
