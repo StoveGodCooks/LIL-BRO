@@ -10,7 +10,7 @@ Local-first personal AI OS. Model-agnostic. Gets smarter the longer you use it.
 |---|---|---|
 | 0 | Foundation | ✅ DONE |
 | 1 | Connector Layer | ✅ DONE |
-| 2 | Memory System | 🔨 IN PROGRESS |
+| 2 | Memory System | ✅ DONE |
 | 3 | Roadmap Engine | Planned |
 | 4 | Persona System | Planned |
 | 5 | Teaching Mode++ | Planned |
@@ -173,7 +173,7 @@ Lil Bro" at the connector layer.
 
 ---
 
-## 🔨 Phase 2 — Memory System (IN PROGRESS)
+## ✅ Phase 2 — Memory System (DONE)
 
 Persistent vector memory. Accumulates knowledge about you, your projects, and your patterns. Gets more useful the longer you run it.
 
@@ -184,18 +184,21 @@ Persistent vector memory. Accumulates knowledge about you, your projects, and yo
 - [x] `project_registry.py` — register and track projects (JSON, no file watcher yet)
 - [x] `session_summarizer.py` — summarize sessions via local Ollama model
 - [x] `context_injector.py` — inject relevant memory into prompts
-- [ ] `preference_log.py` — log user preferences and patterns over time
+- [x] `preference_log.py` — log user preferences and patterns over time
 
 ### Commands
 - [x] `/remember <note>` — store a manual memory entry
 - [x] `/recall <query>` — semantic search over memories
+- [x] `/memories [n]` — list the n most recent memory entries
+- [x] `/forget <query>` — remove memories and preferences matching a query
+- [x] `/prefs [n]` — show top observed preference patterns
 
 ### Behavior
 - [x] Project registry registers and counts sessions on startup
 - [x] Session summarized and stored in ChromaDB on shutdown (fire-and-forget)
 - [x] Semantic search over past sessions via `/recall`
 - [x] ContextInjector prepends relevant memories to prompts (when chromadb present)
-- [ ] Preference log surfaces patterns ("you always use dataclasses for this")
+- [x] Preference log surfaces patterns via `/prefs` ("you always use dataclasses for this")
 
 ---
 
