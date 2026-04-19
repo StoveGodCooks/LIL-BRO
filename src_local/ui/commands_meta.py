@@ -63,6 +63,11 @@ COMMANDS: list[tuple[str, str, str]] = [
     ("/player",                 "--",          "Show your RPG card -- level, skills, badges, perks"),
     ("/export-html",            "--",          "Export the current journal to a styled HTML file"),
     ("/bunkbed",                "Lil Bro",     "Toggle Lil Bro's write access (default: read-only)"),
+    ("/backend big <spec>",    "Big Bro",     "Live-switch Big Bro backend (ollama / claude/model / codex)"),
+    ("/backend lil <spec>",    "Lil Bro",     "Live-switch Lil Bro backend (ollama / claude / codex / flex)"),
+    ("/flex",                   "Lil Bro",     "Toggle Lil Bro FLEX mode — routes each turn to the best backend"),
+    ("/remember <note>",        "--",          "Store a manual memory entry (requires chromadb)"),
+    ("/recall <query>",         "--",          "Semantic search over saved memories"),
     ("/quit  /exit",            "--",          "Shut down THE BROS"),
 ]
 

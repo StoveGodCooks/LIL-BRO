@@ -390,6 +390,7 @@ class CommandHandler:
         self.campaign_state = campaign_state
         self.config = config
         self._bunkbed: bool = False
+        self._backend_swapper: Callable | None = None
 
     # -----------------------------------------------------------------
     # RPG award helper
@@ -416,6 +417,16 @@ class CommandHandler:
             return banners
         except Exception:  # noqa: BLE001
             return []
+
+    def set_backend_swapper(self, fn: Callable) -> None:
+        """Register the async callback used by /backend for live switching.
+
+        The callable signature is:
+          async fn(role: str, spec: str, panel) -> None
+        where ``role`` is ``"big"`` or ``"lil"`` and ``spec`` is a
+        ``provider`` or ``provider/model`` string.
+        """
+        self._backend_swapper = fn
 
     # -----------------------------------------------------------------
     # Entry point
@@ -550,6 +561,18 @@ class CommandHandler:
             return self._cmd_skip()
         if cmd == "/bunkbed":
             return self._cmd_bunkbed()
+
+        if cmd == "/backend":
+            return self._cmd_backend(arg)
+
+        if cmd == "/flex":
+            return self._cmd_flex()
+
+        if cmd == "/remember":
+            return self._cmd_remember(arg)
+
+        if cmd == "/recall":
+            return self._cmd_recall(arg)
 
         # Dynamic skill lookup -- /skill-name maps to ~/.lilbro-local/skills/skill_name.*
         skill_name = cmd.lstrip("/")
@@ -1683,6 +1706,191 @@ class CommandHandler:
         except Exception as exc:  # noqa: BLE001
             return CommandResult(
                 bypass_agent=True, message=f"skill error: {exc}"
+            )
+
+    # -----------------------------------------------------------------
+    # Backend switching
+    # -----------------------------------------------------------------
+
+    def _cmd_backend(self, arg: str) -> CommandResult:
+        """/backend big|lil <spec> -- live-switch a bro's backend.
+
+        Examples::
+
+            /backend big ollama
+            /backend big claude/sonnet-4
+            /backend lil codex
+            /backend lil flex
+        """
+        parts = arg.strip().split(maxsplit=1)
+        if len(parts) < 2:
+            return CommandResult(
+                bypass_agent=True,
+                message=(
+                    "usage:\n"
+                    "  /backend big ollama\n"
+                    "  /backend big claude/sonnet-4\n"
+                    "  /backend lil codex\n"
+                    "  /backend lil flex"
+                ),
+            )
+        role_raw, spec = parts[0].lower(), parts[1].strip()
+        if role_raw in ("big", "bigbro", "big_bro"):
+            role = "big"
+            panel = self.big_bro_panel
+            label = "Big Bro"
+        elif role_raw in ("lil", "lilbro", "lil_bro"):
+            role = "lil"
+            panel = self.lil_bro_panel
+            label = "Lil Bro"
+        else:
+            return CommandResult(
+                bypass_agent=True,
+                message=f"unknown role '{role_raw}' — use 'big' or 'lil'.",
+            )
+
+        swapper = self._backend_swapper
+
+        async def _do_swap() -> None:
+            if swapper is None:
+                if panel is not None:
+                    panel.append_system(
+                        "/backend: swapper not wired up (restart the app)"
+                    )
+                return
+            try:
+                await swapper(role, spec, panel)
+            except Exception as exc:  # noqa: BLE001
+                if panel is not None:
+                    panel.append_error(f"/backend swap failed: {exc}")
+
+        return CommandResult(
+            bypass_agent=True,
+            message=f"switching {label} backend to {spec}...",
+            async_work=_do_swap,
+        )
+
+    # -----------------------------------------------------------------
+    # FLEX mode
+    # -----------------------------------------------------------------
+
+    def _cmd_flex(self) -> CommandResult:
+        """/flex -- toggle Lil Bro between FlexAgent and its fallback backend."""
+        from src_local.agents.flex_agent import FlexAgent
+
+        if self.lil_bro is None:
+            return CommandResult(bypass_agent=True, message="Lil Bro not available.")
+
+        swapper = self._backend_swapper
+        panel = self.lil_bro_panel
+
+        if isinstance(self.lil_bro, FlexAgent):
+            # Already flex — switch back to the fallback backend.
+            fallback_model = getattr(
+                self.lil_bro.fallback_backend, "model", None
+            ) or "?"
+            fallback_cls = type(self.lil_bro.fallback_backend).__name__.lower()
+            if fallback_cls.startswith("claude"):
+                fallback_spec = f"claude/{fallback_model}"
+            elif fallback_cls.startswith("codex"):
+                fallback_spec = f"codex/{fallback_model}"
+            else:
+                fallback_spec = f"ollama/{fallback_model}"
+            spec = fallback_spec
+            msg = f"FLEX off — Lil Bro switching back to {spec}"
+        else:
+            spec = "flex"
+            msg = "FLEX on — Lil Bro will route each turn to the best backend"
+
+        async def _do_swap() -> None:
+            if swapper is None:
+                if panel is not None:
+                    panel.append_system(
+                        "/flex: swapper not wired up (restart the app)"
+                    )
+                return
+            try:
+                await swapper("lil", spec, panel)
+            except Exception as exc:  # noqa: BLE001
+                if panel is not None:
+                    panel.append_error(f"/flex swap failed: {exc}")
+
+        return CommandResult(
+            bypass_agent=True,
+            message=msg,
+            async_work=_do_swap,
+        )
+
+    # -----------------------------------------------------------------
+    # Memory commands
+    # -----------------------------------------------------------------
+
+    def _cmd_remember(self, arg: str) -> CommandResult:
+        """/remember <note> -- store a manual memory entry."""
+        note = arg.strip()
+        if not note:
+            return CommandResult(
+                bypass_agent=True,
+                message="usage: /remember <note>  (stores a manual memory entry)",
+            )
+        try:
+            from src_local.memory.chroma_store import MemoryStore
+            store_dir = Path.home() / ".lilbro-local" / "memory"
+            store = MemoryStore(store_dir)
+            import time as _time
+            mid = store.add(
+                note,
+                metadata={
+                    "type": "manual",
+                    "timestamp": _time.time(),
+                    "project": str(self.project_dir or ""),
+                },
+            )
+            return CommandResult(
+                bypass_agent=True,
+                message=f"memory stored [{mid[:8]}]: {note[:80]}",
+            )
+        except Exception as exc:  # noqa: BLE001
+            return CommandResult(
+                bypass_agent=True,
+                message=f"memory unavailable: {exc}",
+            )
+
+    def _cmd_recall(self, arg: str) -> CommandResult:
+        """/recall <query> -- search memory and show top 3 results."""
+        query = arg.strip()
+        if not query:
+            return CommandResult(
+                bypass_agent=True,
+                message="usage: /recall <query>  (semantic search over saved memories)",
+            )
+        try:
+            from src_local.memory.chroma_store import MemoryStore
+            store_dir = Path.home() / ".lilbro-local" / "memory"
+            store = MemoryStore(store_dir)
+            results = store.search(query, n=3)
+            if not results:
+                return CommandResult(
+                    bypass_agent=True,
+                    message=f"no memories found for: {query}",
+                )
+            import datetime as _dt
+            lines = [f"memories for '{query}':"]
+            for i, r in enumerate(results, 1):
+                ts = r.get("metadata", {}).get("timestamp")
+                if ts:
+                    when = _dt.datetime.fromtimestamp(float(ts)).strftime(
+                        "%Y-%m-%d %H:%M"
+                    )
+                else:
+                    when = "?"
+                text = r.get("text", "")
+                lines.append(f"  {i}. [{when}] {text[:120]}")
+            return CommandResult(bypass_agent=True, message="\n".join(lines))
+        except Exception as exc:  # noqa: BLE001
+            return CommandResult(
+                bypass_agent=True,
+                message=f"memory unavailable: {exc}",
             )
 
     # -----------------------------------------------------------------

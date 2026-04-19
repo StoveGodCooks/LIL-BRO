@@ -9,8 +9,8 @@ Local-first personal AI OS. Model-agnostic. Gets smarter the longer you use it.
 | Phase | Name | Status |
 |---|---|---|
 | 0 | Foundation | ✅ DONE |
-| 1 | Connector Layer | 🔨 IN PROGRESS |
-| 2 | Memory System | Planned |
+| 1 | Connector Layer | ✅ DONE |
+| 2 | Memory System | 🔨 IN PROGRESS |
 | 3 | Roadmap Engine | Planned |
 | 4 | Persona System | Planned |
 | 5 | Teaching Mode++ | Planned |
@@ -124,18 +124,18 @@ Lil Bro" at the connector layer.
   ```
 
 ### FLEX mode (Lil Bro adaptive routing)
-- [ ] `/flex` — toggle Lil Bro FLEX mode on/off inline
-- [ ] Task classifier — heuristics-based, picks best available backend:
+- [x] `/flex` — toggle Lil Bro FLEX mode on/off inline
+- [x] Task classifier — heuristics-based, picks best available backend:
   - `/explain`, `/teach`, concept questions → Codex
   - Code gen, file edits, refactors → Claude
   - Quick questions, offline → Ollama
   - Complex reasoning → Claude or Codex
-- [ ] Falls back to Ollama if preferred backend unavailable
+- [x] Falls back to Ollama if preferred backend unavailable
 
 ### Permissions
 - [x] Lil Bro read-only on all backends by default
 - [x] `/bunkbed` unlocks Lil Bro write access regardless of backend
-- [ ] Codex: enforce via `sandbox_mode="read-only"` on spawn *(Claude already enforces via permission-mode=plan)*
+- [x] Codex: enforce via `sandbox_mode="read-only"` on spawn *(Claude already enforces via permission-mode=plan)*
 
 ### UI changes shipped alongside connectors
 - [x] Live collapsible tool call feed — yellow headers, expand for Read/Edit/Bash/Write detail
@@ -150,18 +150,18 @@ Lil Bro" at the connector layer.
 ### Setup flow (first_run.py extension)
 - [x] Mode selection: local (Ollama) / cloud (Claude/Codex) / flex
 - [x] Cloud path: detect CLI, guided install if missing
-- [ ] Choice persisted to config (first-run result written back to config.yaml)
+- [x] Choice persisted to config (first-run result written back to config.yaml)
 
 ### Live switching
-- [ ] `/backend big [ollama|claude|codex]` — swap Big Bro backend mid-session
-- [ ] `/backend bro [ollama|claude|codex|flex]` — swap Lil Bro backend mid-session
-- [ ] Restarts the relevant agent subprocess cleanly
+- [x] `/backend big [ollama|claude|codex]` — swap Big Bro backend mid-session
+- [x] `/backend lil [ollama|claude|codex|flex]` — swap Lil Bro backend mid-session
+- [x] Restarts the relevant agent subprocess cleanly
 
 ### Status bar (full dynamic)
-- [ ] Shows backend + model per bro at all times
-  - e.g. `[Big Bro · claude · sonnet-4]  [Lil Bro · ollama · qwen2.5:7b]`
-- [ ] `[FLEX]` indicator when Lil Bro is in FLEX mode
-- [ ] Updates live when backend switched
+- [x] Shows backend + model per bro at all times
+  - e.g. `Big Bro · claude · sonnet-4   Lil Bro · ollama · qwen2.5:7b`
+- [x] `[FLEX]` indicator when Lil Bro is in FLEX mode
+- [x] Updates live when backend switched
 
 ---
 
@@ -173,22 +173,28 @@ Lil Bro" at the connector layer.
 
 ---
 
-## Phase 2 — Memory System
+## 🔨 Phase 2 — Memory System (IN PROGRESS)
 
 Persistent vector memory. Accumulates knowledge about you, your projects, and your patterns. Gets more useful the longer you run it.
 
 **Depends on:** Phase 1
 
 ### New: `src_local/memory/`
-- [ ] `chroma_store.py` — local Chroma vector DB wrapper
-- [ ] `project_registry.py` — register and track projects + file watcher
+- [x] `chroma_store.py` — local Chroma vector DB wrapper (optional dep, graceful no-op)
+- [x] `project_registry.py` — register and track projects (JSON, no file watcher yet)
+- [x] `session_summarizer.py` — summarize sessions via local Ollama model
+- [x] `context_injector.py` — inject relevant memory into prompts
 - [ ] `preference_log.py` — log user preferences and patterns over time
-- [ ] `context_injector.py` — inject relevant memory into prompts
+
+### Commands
+- [x] `/remember <note>` — store a manual memory entry
+- [x] `/recall <query>` — semantic search over memories
 
 ### Behavior
-- [ ] Every session summarized and stored
-- [ ] Semantic search over past sessions ("what was wrong with the mesh pipeline?")
-- [ ] Project registry watches active files for context
+- [x] Project registry registers and counts sessions on startup
+- [x] Session summarized and stored in ChromaDB on shutdown (fire-and-forget)
+- [x] Semantic search over past sessions via `/recall`
+- [x] ContextInjector prepends relevant memories to prompts (when chromadb present)
 - [ ] Preference log surfaces patterns ("you always use dataclasses for this")
 
 ---
