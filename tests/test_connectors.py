@@ -27,7 +27,7 @@ from src_local.agents.ollama_agent import OllamaAgent
 
 class TestRegistryShape:
     def test_known_providers(self) -> None:
-        assert set(CONNECTORS) == {"ollama", "claude", "codex"}
+        assert set(CONNECTORS) == {"ollama", "claude", "codex", "flex"}
 
     def test_list_providers_matches_available(self) -> None:
         assert list_providers() == AVAILABLE_PROVIDERS

@@ -47,10 +47,14 @@ class StatusBar(Horizontal):
         self._last_xp_text: str = ""
         self._model_name: str = ""
         self._bunkbed: bool = False
+        # Per-bro backend label cache.
+        self._last_backends_text: str = ""
+        self._lil_flex: bool = False
 
     def compose(self) -> ComposeResult:
         yield Static("", id="status-focus")
         yield Static("", id="status-bunkbed")
+        yield Static("", id="status-backends")
         yield Static("", id="status-busy")
         yield Static("", id="status-xp")
         yield Static("", id="status-journal")
@@ -104,7 +108,67 @@ class StatusBar(Horizontal):
             return
         xp_widget.update(text)
 
+    def _tick_backends(self) -> None:
+        """Refresh the backend display when either agent's model changes."""
+        if self._big_bro is None and self._lil_bro is None:
+            return
+        big_model = getattr(self._big_bro, "model", None) or "?"
+        lil_model = getattr(self._lil_bro, "model", None) or "?"
+
+        def _provider(agent) -> str:
+            if agent is None:
+                return "?"
+            cls = type(agent).__name__.lower()
+            if cls.startswith("claude"):
+                return "claude"
+            if cls.startswith("codex"):
+                return "codex"
+            if cls.startswith("flex"):
+                return "flex"
+            return "ollama"
+
+        big_prov = _provider(self._big_bro)
+        lil_prov = _provider(self._lil_bro)
+        big_label = f"{big_prov} · {big_model}"
+        lil_label = f"{lil_prov} · {lil_model}"
+        self.update_bro_info(big_label, lil_label)
+
     # ---- setters ----
+
+    def update_bro_info(self, big_label: str, lil_label: str) -> None:
+        """Update the per-bro backend display in the status bar.
+
+        ``big_label`` / ``lil_label`` are short strings like
+        ``"claude · sonnet-4"`` or ``"ollama · qwen2.5-coder:7b"``.
+        """
+        lil_part = lil_label
+        if self._lil_flex:
+            lil_part = f"{lil_label} [FLEX]"
+        text = f"Big Bro · {big_label}   Lil Bro · {lil_part}"
+        if text == self._last_backends_text:
+            return
+        self._last_backends_text = text
+        try:
+            self.query_one("#status-backends", Static).update(text)
+        except Exception:  # noqa: BLE001
+            pass
+
+    def set_flex(self, on: bool) -> None:
+        """Append or remove the [FLEX] suffix on the Lil Bro backend label."""
+        self._lil_flex = on
+        # Rebuild the label using the cached text (strip any old [FLEX] first).
+        base = self._last_backends_text
+        if not base:
+            return
+        # Force a redraw by clearing the cache.
+        self._last_backends_text = ""
+        # Re-split big / lil from the cached label.
+        if "   Lil Bro · " in base:
+            big_part, _, lil_part = base.partition("   Lil Bro · ")
+            big_label = big_part.removeprefix("Big Bro · ")
+            # Strip any trailing [FLEX] from the lil part.
+            lil_label = lil_part.removesuffix(" [FLEX]")
+            self.update_bro_info(big_label, lil_label)
 
     def set_focus(self, goal: str | None) -> None:
         self._focus = goal
@@ -194,6 +258,8 @@ class StatusBar(Horizontal):
         busy_widget.update(text)
         # Piggyback XP repaint on the busy tick.
         self._tick_xp()
+        # Piggyback per-bro backend refresh on the busy tick.
+        self._tick_backends()
 
     @staticmethod
     def _format_elapsed(seconds: float) -> str:

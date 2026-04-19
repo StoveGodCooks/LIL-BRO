@@ -218,6 +218,11 @@ class DualPaneScreen(Screen):
         self._keybindings = keybindings or {}
         # NotesPad -- persists text across open/close for the session.
         self._notes_text: str = ""
+        # Memory system — initialised lazily on mount, gracefully absent.
+        self._memory_store = None
+        self._project_registry = None
+        self._context_injector = None
+        self._session_summarizer = None
 
     def compose(self) -> ComposeResult:
         with Container(id="main-container"):
@@ -234,6 +239,9 @@ class DualPaneScreen(Screen):
         # Bind the input bar to the router so prefix/color updates on target switch.
         input_bar = self.query_one("#input-bar", InputBar)
         self._router.bind_input_bar(input_bar)
+
+        # Initialise memory system — best effort, never blocks startup.
+        self._init_memory()
 
         # Apply any keybinding overrides from config.
         self._apply_keybinding_overrides()
@@ -302,6 +310,68 @@ class DualPaneScreen(Screen):
         )
         self.run_worker(self._start_agents(), exclusive=True)
 
+    async def _persist_session_memory(self) -> None:
+        """Summarize the session and store it. Fire-and-forget on unmount."""
+        try:
+            import time as _time
+            import uuid as _uuid
+
+            session_text = ""
+            if self._journal is not None:
+                try:
+                    session_text = self._journal.render_markdown()
+                except Exception:  # noqa: BLE001
+                    pass
+
+            if not session_text.strip():
+                return
+
+            summary = await self._session_summarizer.summarize(session_text)
+            if summary:
+                self._memory_store.add_session(
+                    session_id=str(_uuid.uuid4()),
+                    summary=summary,
+                    project=str(Path.cwd()),
+                    timestamp=_time.time(),
+                )
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("_persist_session_memory failed: %s", exc)
+
+    def _init_memory(self) -> None:
+        """Initialise memory subsystem. No-ops if chromadb not installed."""
+        try:
+            from src_local.memory.chroma_store import MemoryStore
+            from src_local.memory.context_injector import ContextInjector
+            from src_local.memory.project_registry import ProjectRegistry
+            from src_local.memory.session_summarizer import SessionSummarizer
+
+            lilbro_dir = Path.home() / ".lilbro-local"
+            self._memory_store = MemoryStore(lilbro_dir / "memory")
+            self._project_registry = ProjectRegistry(
+                lilbro_dir / "projects.json"
+            )
+            self._context_injector = ContextInjector(
+                self._memory_store, max_memories=3
+            )
+            self._session_summarizer = SessionSummarizer(
+                base_url=getattr(
+                    getattr(self._config, "ollama", None),
+                    "base_url",
+                    "http://127.0.0.1:11434",
+                ),
+                model=getattr(
+                    getattr(self._config, "ollama", None),
+                    "model",
+                    "qwen2.5-coder:7b",
+                ),
+            )
+            # Register the current project.
+            cwd = str(Path.cwd())
+            self._project_registry.register(cwd)
+            self._project_registry.increment_session_count(cwd)
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("memory system init skipped: %s", exc)
+
     async def _start_agents(self) -> None:
         """Spawn both agents in parallel."""
         import asyncio as _asyncio
@@ -343,6 +413,18 @@ class DualPaneScreen(Screen):
 
     async def on_unmount(self) -> None:
         """Stop agents and persist state when the screen is unmounted."""
+        # Fire-and-forget session summarization into memory.
+        try:
+            if (
+                self._session_summarizer is not None
+                and self._memory_store is not None
+                and self._journal is not None
+            ):
+                import asyncio as _asyncio
+                _asyncio.ensure_future(self._persist_session_memory())
+        except Exception:  # noqa: BLE001
+            pass
+
         # Best-effort journal flush.
         try:
             if self._journal.directory is not None and self._journal.entries:
@@ -1046,6 +1128,90 @@ class LilBroLocalApp(App):
             status_bar=status_bar,
         )
 
+        # Wire backend swapper into the command handler so /backend and
+        # /flex can hot-swap agents mid-session without restarting the app.
+        # ``_screen_ref`` is a one-element list so the closure can resolve
+        # main_screen after it is constructed below (late binding).
+        _screen_ref: list = []
+
+        async def _swap_backend(role: str, spec: str, panel) -> None:
+            """Stop the current agent, build a new one, and wire it up."""
+            from src_local.agents.connectors import build_agent as _build_agent
+
+            is_big = role == "big"
+            cur_agent = self._big_backend if is_big else self._lil_backend
+            display = "Big Bro" if is_big else "Lil Bro"
+            screen = _screen_ref[0] if _screen_ref else None
+
+            # Stop the running agent.
+            try:
+                if screen is not None:
+                    if is_big:
+                        await screen._big_bro_agent.stop()
+                    else:
+                        await screen._lil_bro_agent.stop()
+            except Exception:  # noqa: BLE001
+                pass
+
+            # Build the new agent.
+            write_ok = is_big
+            try:
+                new_agent = _build_agent(
+                    spec,
+                    role=role,
+                    display_name=display,
+                    write_access=write_ok,
+                    sibling_name="Lil Bro" if is_big else "Big Bro",
+                    sibling_backend=cur_agent,
+                    base_url=base_url,
+                    system_prompt=CODER_SYSTEM_PROMPT if is_big else HELPER_SYSTEM_PROMPT,
+                    temperature=self._config.ollama.temperature,
+                    context_window=ctx_big if is_big else ctx_lil,
+                    project_dir=project_dir,
+                    cwd=project_dir,
+                )
+            except Exception as exc:  # noqa: BLE001
+                if panel is not None:
+                    panel.append_error(f"/backend: failed to build agent: {exc}")
+                return
+
+            # Start the new agent.
+            try:
+                await new_agent.start()
+            except Exception as exc:  # noqa: BLE001
+                if panel is not None:
+                    panel.append_error(f"/backend: failed to start agent: {exc}")
+                return
+
+            # Swap into the router and screen.
+            if is_big:
+                router.big_bro_agent = new_agent
+                if screen is not None:
+                    screen._big_bro_agent = new_agent
+                commands.big_bro = new_agent
+            else:
+                router.lil_bro_agent = new_agent
+                if screen is not None:
+                    screen._lil_bro_agent = new_agent
+                commands.lil_bro = new_agent
+
+            # Refresh status bar.
+            big_model = getattr(router.big_bro_agent, "model", "?") or "?"
+            lil_model = getattr(router.lil_bro_agent, "model", "?") or "?"
+            big_prov = _backend_name(router.big_bro_agent)
+            lil_prov = _backend_name(router.lil_bro_agent)
+            status_bar.update_bro_info(
+                f"{big_prov} · {big_model}",
+                f"{lil_prov} · {lil_model}",
+            )
+            status_bar.attach_agents(router.big_bro_agent, router.lil_bro_agent)
+
+            if panel is not None:
+                new_model = getattr(new_agent, "model", "?") or spec
+                panel.append_system(f"{display} backend switched to {new_model}")
+
+        commands.set_backend_swapper(_swap_backend)
+
         # -- Debug overlay ---------------------------------------------------
         debug_overlay = DebugOverlay(id="debug-overlay")
         debug_overlay.attach_agents(big_bro, lil_bro)
@@ -1068,6 +1234,8 @@ class LilBroLocalApp(App):
             quest_cache=quest_cache,
             debug_overlay=debug_overlay,
         )
+        # Resolve the screen reference for the backend-swapper closure.
+        _screen_ref.append(main_screen)
 
         self.push_screen(main_screen)
 

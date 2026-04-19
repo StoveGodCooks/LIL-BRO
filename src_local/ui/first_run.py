@@ -12,7 +12,9 @@ Option C flow:
 from __future__ import annotations
 
 import asyncio
+import logging
 import random
+from pathlib import Path
 
 from textual.app import ComposeResult
 from textual.binding import Binding
@@ -34,6 +36,8 @@ from src_local.agents.cloud_install import (
     detect_all as detect_cloud_all,
     install_cli as install_cloud_cli,
 )
+
+logger = logging.getLogger("lilbro-local.first_run")
 
 
 # ── Bros bickering lines (shown during install / pull) ───────
@@ -944,6 +948,43 @@ class FirstRunScreen(Screen):
                 tag = _MODEL_BY_BTN[bid]
                 self.run_worker(self._pull_model(tag))
 
+    # ── Config persistence ───────────────────────────────────
+
+    @staticmethod
+    def _persist_backend_choice(big_spec: str, lil_spec: str) -> None:
+        """Write the wizard's backend choices back to ~/.lilbro-local/config.yaml.
+
+        Uses a simple read → update dict → write approach so we only
+        overwrite ``big_bro`` and ``lil_bro`` keys, leaving everything
+        else intact.
+        """
+        config_path = Path.home() / ".lilbro-local" / "config.yaml"
+        try:
+            config_path.parent.mkdir(parents=True, exist_ok=True)
+            existing: dict = {}
+            if config_path.exists():
+                import yaml  # type: ignore[import-not-found]
+                try:
+                    text = config_path.read_text(encoding="utf-8")
+                    loaded = yaml.safe_load(text)
+                    if isinstance(loaded, dict):
+                        existing = loaded
+                except Exception:  # noqa: BLE001
+                    pass
+            existing["big_bro"] = big_spec
+            existing["lil_bro"] = lil_spec
+            import yaml  # type: ignore[import-not-found]
+            config_path.write_text(
+                yaml.dump(existing, default_flow_style=False, allow_unicode=True),
+                encoding="utf-8",
+            )
+            logger.info(
+                "persisted backend choice: big_bro=%s lil_bro=%s",
+                big_spec, lil_spec,
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("could not persist backend choice: %s", exc)
+
     def action_continue(self) -> None:
         if not self._ready:
             return
@@ -951,6 +992,12 @@ class FirstRunScreen(Screen):
         # ``open_dual_pane`` can wire up the right connectors. The app
         # falls back to Ollama defaults if these attributes are absent.
         app = self.app
+        big_spec = self._big_backend
+        if self._big_model:
+            big_spec = f"{self._big_backend}/{self._big_model}"
+        lil_spec = self._lil_backend
+        if self._lil_model:
+            lil_spec = f"{self._lil_backend}/{self._lil_model}"
         try:
             app._big_backend = self._big_backend  # type: ignore[attr-defined]
             app._big_model = self._big_model  # type: ignore[attr-defined]
@@ -958,6 +1005,9 @@ class FirstRunScreen(Screen):
             app._lil_model = self._lil_model  # type: ignore[attr-defined]
         except Exception:
             pass
+        # Persist the user's choices so the next launch skips the wizard
+        # and boots straight into their preferred backends.
+        self._persist_backend_choice(big_spec, lil_spec)
         self.app.open_dual_pane()  # type: ignore[attr-defined]
 
     def action_quit_app(self) -> None:

@@ -33,7 +33,7 @@ if TYPE_CHECKING:
 #: Tuple of every provider name recognised by the registry. Order is the
 #: preferred display / fallback order (Ollama first = always available
 #: default; cloud providers after).
-AVAILABLE_PROVIDERS: tuple[str, ...] = ("ollama", "claude", "codex")
+AVAILABLE_PROVIDERS: tuple[str, ...] = ("ollama", "claude", "codex", "flex")
 
 #: Providers that require a logged-in subscription (no API key path).
 #: Used by the first-run wizard and health checks to decide whether to
@@ -119,6 +119,69 @@ def _build_codex(
     )
 
 
+def _build_flex(
+    *,
+    role: str,
+    display_name: str,
+    model: str | None = None,  # noqa: ARG001
+    write_access: bool = False,
+    sibling_name: str = "the other pane",
+    sibling_backend: str = "another model",
+    **extra: Any,
+) -> "AgentProcess":
+    """Build a FlexAgent whose sub-agents are auto-selected from available providers.
+
+    Fallback chain:
+    - teaching_backend: codex → claude → ollama (first available)
+    - coding_backend:   claude → codex → ollama
+    - fallback_backend: always ollama
+    """
+    from src_local.agents.flex_agent import FlexAgent
+
+    # Build the three sub-agents.  Cloud sub-agents may be unavailable
+    # at runtime (e.g. CLI not installed) but that is surfaced at the
+    # first turn, not at construction time — matches how the non-flex
+    # path works.
+    fallback = _build_ollama(
+        role=role,
+        display_name=display_name,
+        write_access=write_access,
+        sibling_name=sibling_name,
+        sibling_backend=sibling_backend,
+        **extra,
+    )
+
+    try:
+        teaching = _build_codex(
+            role=role,
+            display_name=display_name,
+            write_access=False,
+            sibling_name=sibling_name,
+            sibling_backend=sibling_backend,
+            **extra,
+        )
+    except Exception:  # noqa: BLE001
+        teaching = fallback
+
+    try:
+        coding = _build_claude(
+            role=role,
+            display_name=display_name,
+            write_access=write_access,
+            sibling_name=sibling_name,
+            sibling_backend=sibling_backend,
+            **extra,
+        )
+    except Exception:  # noqa: BLE001
+        coding = fallback
+
+    return FlexAgent(
+        teaching_backend=teaching,
+        coding_backend=coding,
+        fallback_backend=fallback,
+    )
+
+
 #: The registry itself. Keys are lowercase provider names as they appear
 #: in user-facing config. ``CONNECTORS["claude"]`` is the factory — call
 #: it via :func:`build_agent` rather than directly so provider validation
@@ -127,6 +190,7 @@ CONNECTORS: dict[str, ConnectorFactory] = {
     "ollama": _build_ollama,
     "claude": _build_claude,
     "codex": _build_codex,
+    "flex": _build_flex,
 }
 
 
