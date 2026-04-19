@@ -82,6 +82,12 @@ COMMANDS: list[tuple[str, str, str]] = [
     ("/dad <question>",         "-> Big Bro",  "Address the execution/efficiency persona"),
     ("/grandma <question>",     "-> Lil Bro",  "Address the memory/big-picture persona"),
     ("/persona [name|auto]",    "--",          "Show or set the active persona (mom|dad|grandma|auto)"),
+    ("/sheet",                  "--",          "Compact character sheet (level, XP, top skills, badges)"),
+    ("/lesson <topic>",         "-> teach",    "Adaptive lesson — picks best backend, grandma lens"),
+    ("/pwa start [port]",       "--",          "Start the phone PWA server (default port 8765)"),
+    ("/pwa stop",               "--",          "Stop the PWA server"),
+    ("/pwa url",                "--",          "Show the current PWA URL"),
+    ("/notify <message>",       "--",          "Send a push via ntfy.sh (needs notify.topic in config)"),
     ("/quit  /exit",            "--",          "Shut down THE BROS"),
 ]
 

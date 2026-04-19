@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>LIL BRO</title>
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <meta name="theme-color" content="#1a1a1a" />
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <header>
+    <h1>LIL BRO</h1>
+    <nav>
+      <button data-view="roadmap" class="active">Roadmap</button>
+      <button data-view="memories">Memories</button>
+      <button data-view="prefs">Prefs</button>
+      <button data-view="icebox">Icebox</button>
+    </nav>
+  </header>
+  <main>
+    <section id="roadmap" class="view active"><em>loading…</em></section>
+    <section id="memories" class="view"><em>loading…</em></section>
+    <section id="prefs" class="view"><em>loading…</em></section>
+    <section id="icebox" class="view"><em>loading…</em></section>
+  </main>
+  <footer>
+    <span id="status">offline-first · local-only</span>
+  </footer>
+  <script src="/static/app.js"></script>
+  <script>
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("/service-worker.js").catch(() => {});
+    }
+  </script>
+</body>
+</html>

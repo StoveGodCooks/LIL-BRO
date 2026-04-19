@@ -611,6 +611,18 @@ class CommandHandler:
         if cmd == "/persona":
             return self._cmd_persona(arg)
 
+        # Phase 5 -- teaching mode++
+        if cmd == "/sheet":
+            return self._cmd_sheet(arg)
+        if cmd == "/lesson":
+            return self._cmd_lesson(arg)
+
+        # Phase 6 -- PWA + notifications
+        if cmd == "/pwa":
+            return self._cmd_pwa(arg)
+        if cmd == "/notify":
+            return self._cmd_notify(arg)
+
         # Dynamic skill lookup -- /skill-name maps to ~/.lilbro-local/skills/skill_name.*
         skill_name = cmd.lstrip("/")
         skill_path = find_skill(skill_name)
@@ -2348,6 +2360,174 @@ class CommandHandler:
             bypass_agent=False,
             forced_target=target,  # type: ignore[arg-type]
             rewritten_prompt=rewritten,
+        )
+
+    # -----------------------------------------------------------------
+    # Phase 5 -- Teaching Mode++
+    # -----------------------------------------------------------------
+
+    def _cmd_sheet(self, arg: str) -> CommandResult:
+        """/sheet -- render a compact character sheet."""
+        from src_local.teaching.character_sheet import render
+        if self.player_profile is None:
+            return CommandResult(
+                bypass_agent=True,
+                message="CHARACTER SHEET\n  (no player profile loaded)",
+            )
+        try:
+            text = render(self.player_profile, persona=self.active_persona)
+        except Exception as exc:  # noqa: BLE001
+            text = f"CHARACTER SHEET\n  (render failed: {exc})"
+        return CommandResult(bypass_agent=True, message=text)
+
+    def _cmd_lesson(self, arg: str) -> CommandResult:
+        """/lesson <topic> -- connector-aware adaptive lesson."""
+        topic = arg.strip()
+        if not topic:
+            return CommandResult(
+                bypass_agent=True,
+                message="usage: /lesson <topic>  (adaptive, picks best backend)",
+            )
+
+        # Score familiarity using whatever signals are reachable.
+        pref_query = None
+        memory_search = None
+        try:
+            from src_local.memory.preference_log import PreferenceLog
+            plog = PreferenceLog(
+                Path.home() / ".lilbro-local" / "preferences.json"
+            )
+            pref_query = lambda t, _p=plog: _p.query()  # noqa: E731
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            from src_local.memory.chroma_store import MemoryStore
+            mstore = MemoryStore(Path.home() / ".lilbro-local" / "memory")
+            memory_search = lambda t, _m=mstore: _m.search(t, n=3)  # noqa: E731
+        except Exception:  # noqa: BLE001
+            pass
+
+        from src_local.teaching.adaptive import (
+            DifficultyEngine,
+            difficulty_instructions,
+        )
+        fam = DifficultyEngine(
+            pref_query=pref_query,
+            memory_search=memory_search,
+        ).score(topic)
+        note = difficulty_instructions(fam.tier)
+
+        # Pick the backend.  Use the models/backends we can see on the
+        # attached agents; this mirrors how /backend infers state.
+        available: set[str] = set()
+        for agent in (self.big_bro, self.lil_bro):
+            if agent is None:
+                continue
+            cls = type(agent).__name__.lower()
+            if "claude" in cls:
+                available.add("claude")
+            elif "codex" in cls:
+                available.add("codex")
+            else:
+                available.add("ollama")
+        if not available:
+            available.add("ollama")
+
+        from src_local.teaching.delivery import plan_lesson
+        plan = plan_lesson(topic, available, note)
+
+        # Prepend Grandma's system prefix -- lessons live in her lens.
+        from src_local import personas
+        prefix = personas.GRANDMA.system_prefix
+        rewritten = f"{prefix}\n\n{plan.prompt}"
+
+        # Route to whichever pane runs the selected backend; default
+        # to Lil Bro for teaching.
+        target: Target = "bro"
+        if self.big_bro is not None:
+            big_cls = type(self.big_bro).__name__.lower()
+            if plan.backend in big_cls:
+                target = "big"
+        return CommandResult(
+            bypass_agent=False,
+            forced_target=target,
+            rewritten_prompt=rewritten,
+            message=(
+                f"lesson on '{topic}' (tier: {fam.tier}, via {plan.backend})"
+            ),
+        )
+
+    # -----------------------------------------------------------------
+    # Phase 6 -- PWA + notifications
+    # -----------------------------------------------------------------
+
+    def _cmd_pwa(self, arg: str) -> CommandResult:
+        """/pwa start [port] | stop | url | status"""
+        from src_local.pwa import server as pwa_server
+        text = arg.strip()
+        verb = text.split()[0].lower() if text else "status"
+        if verb == "start":
+            parts = text.split()
+            port = 8765
+            if len(parts) >= 2:
+                try:
+                    port = int(parts[1])
+                except ValueError:
+                    return CommandResult(
+                        bypass_agent=True,
+                        message=f"usage: /pwa start [port]  (got: {parts[1]!r})",
+                    )
+            try:
+                url = pwa_server.start(port=port)
+                return CommandResult(
+                    bypass_agent=True,
+                    message=(
+                        f"PWA running at {url}  (open on phone via Tailscale)"
+                    ),
+                )
+            except Exception as exc:  # noqa: BLE001
+                return CommandResult(
+                    bypass_agent=True, message=f"PWA failed to start: {exc}"
+                )
+        if verb == "stop":
+            pwa_server.stop()
+            return CommandResult(bypass_agent=True, message="PWA stopped")
+        if verb == "url":
+            url = pwa_server.current_url()
+            return CommandResult(
+                bypass_agent=True,
+                message=url or "PWA not running (try /pwa start)",
+            )
+        # status
+        url = pwa_server.current_url()
+        if url:
+            return CommandResult(bypass_agent=True, message=f"PWA: {url}")
+        return CommandResult(
+            bypass_agent=True,
+            message=(
+                "PWA not running\n"
+                "usage: /pwa start [port]  |  /pwa stop  |  /pwa url"
+            ),
+        )
+
+    def _cmd_notify(self, arg: str) -> CommandResult:
+        """/notify <message> -- push to configured ntfy.sh topic."""
+        msg = arg.strip()
+        if not msg:
+            return CommandResult(
+                bypass_agent=True,
+                message="usage: /notify <message>  (set topic in ~/.lilbro-local/config.yaml)",
+            )
+        from src_local.pwa.notify import send_notification
+        try:
+            ok, detail = send_notification(msg)
+        except Exception as exc:  # noqa: BLE001
+            return CommandResult(
+                bypass_agent=True, message=f"notify failed: {exc}"
+            )
+        return CommandResult(
+            bypass_agent=True,
+            message=("notification sent: " + detail) if ok else detail,
         )
 
     # -----------------------------------------------------------------
